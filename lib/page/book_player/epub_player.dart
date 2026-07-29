@@ -108,6 +108,9 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   Timer? _scrollDebounceTimer;
   double _accumulatedScrollDelta = 0;
   static const double _scrollThreshold = 50.0;
+  final Battery _battery = Battery();
+  late Future<int> _batteryLevelFuture;
+  Timer? _batteryLevelTimer;
 
   // to know anytime if we are on top of navigation stack
   bool get _isTopOfNavigationStack =>
@@ -930,6 +933,13 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   void initState() {
     book = widget.book;
     getThemeColor();
+    _batteryLevelFuture = _battery.batteryLevel;
+    _batteryLevelTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      setState(() {
+        _batteryLevelFuture = _battery.batteryLevel;
+      });
+    });
 
     contextMenu = ContextMenu(
       settings: ContextMenuSettings(hideDefaultSystemContextMenuItems: true),
@@ -973,6 +983,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
+    _batteryLevelTimer?.cancel();
     _animationController?.dispose();
     saveReadingProgress();
     removeOverlay();
@@ -981,9 +992,10 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   InAppWebViewSettings initialSettings = InAppWebViewSettings(
     supportZoom: false,
-    transparentBackground: true,
+    transparentBackground: !AnxPlatform.isAndroid,
     isInspectable: kDebugMode,
-    useHybridComposition: true,
+    hardwareAcceleration: true,
+    useHybridComposition: false,
   );
 
   bool get isDarkMode =>
@@ -1104,8 +1116,8 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
       final timeWidget = MinuteClock(textStyle: textStyle);
 
-      final batteryWidget = FutureBuilder(
-          future: Battery().batteryLevel,
+      final batteryWidget = FutureBuilder<int>(
+          future: _batteryLevelFuture,
           builder: (context, snapshot) {
             if (snapshot.hasData) {
               return Stack(

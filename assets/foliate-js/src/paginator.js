@@ -3,16 +3,40 @@ const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
 const lerp = (min, max, x) => x * (max - min) + min
 const easeOutSine = x => Math.sin((x * Math.PI) / 2)
 // const easeOutSine = x => 1 - (1 - x) * (1 - x);
-const animate = (a, b, duration, ease, render) => new Promise(resolve => {
+const animate = (a, b, duration, ease, render, controller) => new Promise((resolve, reject) => {
   let start
+  let frame
+  let settled = false
+  const settle = (callback, value) => {
+    if (settled) return
+    settled = true
+    if (frame != null) cancelAnimationFrame(frame)
+    if (controller) controller.cancel = null
+    callback(value)
+  }
+  const abort = () => settle(resolve, false)
   const step = now => {
+    frame = null
+    if (controller?.cancelled) {
+      abort()
+      return
+    }
     start ??= now
     const fraction = Math.min(1, (now - start) / duration)
-    render(lerp(a, b, ease(fraction)))
-    if (fraction < 1) requestAnimationFrame(step)
-    else resolve()
+    try {
+      render(lerp(a, b, ease(fraction)))
+    } catch (error) {
+      settle(reject, error)
+      return
+    }
+    if (fraction < 1) frame = requestAnimationFrame(step)
+    else settle(resolve, true)
   }
-  requestAnimationFrame(step)
+  if (controller) controller.cancel = abort
+  if (controller?.cancelled) abort()
+  else {
+    frame = requestAnimationFrame(step)
+  }
 })
 
 // collapsed range doesn't return client rects sometimes (or always?)
@@ -204,7 +228,6 @@ class View {
       alignItems: 'center',
       contain: 'layout paint size',
       contentVisibility: 'auto',
-      willChange: 'transform',
     })
     Object.assign(this.#iframe.style, {
       overflow: 'hidden',
@@ -435,12 +458,24 @@ export class Paginator extends HTMLElement {
   #mediaQueryListener
   #ignoreNativeScroll = false
   #pendingScrollFrame = null
+  #pendingScrollTimer = null
+  #pendingTouchEndFrame = null
   #touchState
   #touchScrolled
   #loadingNext = false
   #loadingPrev = false
   #pendingRelocate = null
   #isSnapping = false
+  #animationController = null
+  #animationGeneration = 0
+  #navigationGeneration = 0
+  #activeNavigation = null
+  #pendingNavigation = null
+  #touchDocument = null
+  #touchMovePassive = false
+  #touchStartListener = e => this.#onTouchStart(e)
+  #touchMoveListener = e => this.#onTouchMove(e)
+  #touchEndListener = e => this.#onTouchEnd(e)
   constructor() {
     super()
     this.#root.innerHTML = `<style>
@@ -560,23 +595,29 @@ export class Paginator extends HTMLElement {
         this.#justAnchored = false
         return
       }
+      if (this.scrolled) {
+        if (this.#pendingScrollTimer) return
+        this.#pendingScrollTimer = setTimeout(() => {
+          this.#pendingScrollTimer = null
+          this.#afterScroll('scroll')
+          this.#handleScrollBoundaries()
+        }, 100)
+        return
+      }
       if (this.#pendingScrollFrame)
         cancelAnimationFrame(this.#pendingScrollFrame)
       this.#pendingScrollFrame = requestAnimationFrame(() => {
         this.#pendingScrollFrame = null
         this.#afterScroll('scroll')
-        if (this.scrolled) this.#handleScrollBoundaries()
       })
     })
 
-    const opts = { passive: false }
-    this.addEventListener('touchstart', this.#onTouchStart.bind(this), opts)
-    this.addEventListener('touchmove', this.#onTouchMove.bind(this), opts)
-    this.addEventListener('touchend', this.#onTouchEnd.bind(this), opts)
+    this.#addTouchListeners(this)
     this.addEventListener('load', ({ detail: { doc } }) => {
-      doc.addEventListener('touchstart', this.#onTouchStart.bind(this), opts)
-      doc.addEventListener('touchmove', this.#onTouchMove.bind(this), opts)
-      doc.addEventListener('touchend', this.#onTouchEnd.bind(this), opts)
+      if (this.#touchDocument)
+        this.#removeTouchListeners(this.#touchDocument)
+      this.#touchDocument = doc
+      this.#addTouchListeners(doc)
     })
 
     this.#mediaQueryListener = () => {
@@ -588,6 +629,11 @@ export class Paginator extends HTMLElement {
   attributeChangedCallback(name, _, value) {
     switch (name) {
       case 'flow':
+        if (this.#pendingScrollTimer) {
+          clearTimeout(this.#pendingScrollTimer)
+          this.#pendingScrollTimer = null
+        }
+        this.#updateTouchMoveMode()
         this.render()
         break
       case 'top-margin':
@@ -638,6 +684,7 @@ export class Paginator extends HTMLElement {
   #beforeRender({ vertical, rtl }) {
     this.#vertical = vertical
     this.#rtl = rtl
+    this.#updateTouchMoveMode()
     this.#top.classList.toggle('vertical', vertical)
 
     // set background to `doc` background
@@ -777,13 +824,111 @@ export class Paginator extends HTMLElement {
     if (horizontal) element.scrollBy({ left: delta, top: 0, behavior: 'auto' })
     else element.scrollBy({ left: 0, top: delta, behavior: 'auto' })
   }
-  snap(vx, vy, touchState) {
-    if (this.#isSnapping) return
-    
+  #addTouchListeners(target) {
+    target.addEventListener('touchstart', this.#touchStartListener, { passive: true })
+    target.addEventListener('touchmove', this.#touchMoveListener,
+      { passive: this.#touchMovePassive })
+    target.addEventListener('touchend', this.#touchEndListener, { passive: true })
+  }
+  #removeTouchListeners(target) {
+    target.removeEventListener('touchstart', this.#touchStartListener)
+    target.removeEventListener('touchmove', this.#touchMoveListener)
+    target.removeEventListener('touchend', this.#touchEndListener)
+  }
+  #updateTouchMoveMode() {
+    const passive = this.scrolled && this.scrollProp === 'scrollTop'
+    if (passive === this.#touchMovePassive) return
+
+    this.removeEventListener('touchmove', this.#touchMoveListener)
+    this.#touchDocument?.removeEventListener('touchmove', this.#touchMoveListener)
+    this.#touchMovePassive = passive
+    this.addEventListener('touchmove', this.#touchMoveListener, { passive })
+    this.#touchDocument?.addEventListener(
+      'touchmove', this.#touchMoveListener, { passive })
+  }
+  #clearPendingNavigation() {
+    const pending = this.#pendingNavigation
+    this.#pendingNavigation = null
+    pending?.resolve(false)
+  }
+  #cancelActiveAnimation() {
+    const controller = this.#animationController
+    if (!controller) return false
+    this.#animationController = null
+    const generation = ++this.#animationGeneration
+    controller.cancelled = true
+    controller.cancel?.()
+    this.#ignoreNativeScroll = true
+    if (this.#pendingScrollFrame) {
+      cancelAnimationFrame(this.#pendingScrollFrame)
+      this.#pendingScrollFrame = null
+    }
+    if (this.#pendingScrollTimer) {
+      clearTimeout(this.#pendingScrollTimer)
+      this.#pendingScrollTimer = null
+    }
+    requestAnimationFrame(() => {
+      if (generation === this.#animationGeneration
+        && !this.#animationController) this.#ignoreNativeScroll = false
+    })
+    return true
+  }
+  #enqueueNavigation(intent) {
+    if (!this.#locked) return this.#startNavigation(intent)
+
+    this.#clearPendingNavigation()
+    return new Promise((resolve, reject) => {
+      this.#pendingNavigation = { intent, resolve, reject }
+    })
+  }
+  #startNavigation(intent) {
+    if (this.#locked) return this.#enqueueNavigation(intent)
+    if (this.#activeNavigation)
+      throw new Error('Paginator navigation started while another task is active')
+
+    const generation = ++this.#navigationGeneration
+    this.#locked = true
+    let task
+    task = (async () => {
+      try {
+        return await this.#performNavigation(intent, generation)
+      } finally {
+        if (this.#activeNavigation !== task) return
+
+        this.#locked = false
+        this.#activeNavigation = null
+        const pending = this.#pendingNavigation
+        this.#pendingNavigation = null
+        if (pending) {
+          this.#startNavigation(pending.intent)
+            .then(pending.resolve, pending.reject)
+        }
+      }
+    })()
+    this.#activeNavigation = task
+    return task
+  }
+  async #performNavigation(intent, generation) {
+    if (generation !== this.#navigationGeneration) return false
+    switch (intent.type) {
+      case 'snap':
+        return this.#performSnap(intent, generation)
+      case 'turn':
+        return this.#performTurn(intent, generation)
+      case 'go-to':
+        return this.#goTo(intent.target, generation)
+      default:
+        throw new Error(`Unknown navigation type: ${intent.type}`)
+    }
+  }
+  async snap(vx, vy, touchState) {
+    await this.#enqueueNavigation({ type: 'snap', vx, vy, touchState })
+  }
+  async #performSnap({ vx, vy, touchState }, generation) {
     const state = touchState ?? this.#touchState
     const velocity = this.#vertical ? vy : vx
     const { pages, size } = this
-    if (!pages || size === 0) return
+    if (!pages || size === 0) return false
 
     const element = this.#container
     const { scrollProp } = this
@@ -825,23 +970,37 @@ export class Paginator extends HTMLElement {
 
     const pageArg = this.#rtl ? -targetPage : targetPage
     this.#isSnapping = true
-    
-    return this.#scrollToPage(pageArg, 'snap', { animate: true, duration })
-      .then(() => {
-        // Handle chapter boundaries (keep existing feature)
-        const dir = targetPage <= 0 ? -1 : targetPage >= pages - 1 ? 1 : null
-        if (dir) return this.#goTo({
-          index: this.#adjacentIndex(dir),
+
+    try {
+      const completed = await this.#scrollToPage(
+        pageArg, 'snap', { animate: true, duration })
+      if (!completed || generation !== this.#navigationGeneration) return false
+
+      // Handle chapter boundaries (keep existing feature)
+      const dir = targetPage <= 0 ? -1 : targetPage >= pages - 1 ? 1 : null
+      const index = dir == null ? null : this.#adjacentIndex(dir)
+      if (index != null) {
+        return this.#goTo({
+          index,
           anchor: dir < 0 ? () => 1 : () => 0,
-        })
-      })
-      .finally(() => {
-        this.#isSnapping = false
-        // Restore overflow after snap is complete
-        element.style[overflowProp] = prevOverflow
-      })
+        }, generation)
+      }
+      return true
+    } finally {
+      this.#isSnapping = false
+      // Restore overflow after snap is complete or cancelled.
+      element.style[overflowProp] = prevOverflow
+    }
   }
   #onTouchStart(e) {
+    // A direct gesture owns the scroll position. Discard queued input and stop
+    // the current RAF at its last rendered offset before native scrolling starts.
+    if (this.#pendingTouchEndFrame) {
+      cancelAnimationFrame(this.#pendingTouchEndFrame)
+      this.#pendingTouchEndFrame = null
+    }
+    this.#clearPendingNavigation()
+    this.#cancelActiveAnimation()
     const touch = e.changedTouches[0]
     const scrollProp = this.scrollProp
     this.#touchState = {
@@ -913,6 +1072,17 @@ export class Paginator extends HTMLElement {
     const horizontalDrag = state.direction === 'horizontal'
     const verticalDrag = state.direction === 'vertical'
 
+    if (this.#touchMovePassive) {
+      const dt = e.timeStamp - state.t || 16.7
+      state.vx = (state.x - touch.screenX) / dt
+      state.vy = (state.y - touch.screenY) / dt
+      state.x = touch.screenX
+      state.y = touch.screenY
+      state.t = e.timeStamp
+      this.#touchScrolled = true
+      return
+    }
+
     const forwarded = new CustomEvent('doctouchmove', {
       detail: {
         touch,
@@ -965,6 +1135,10 @@ export class Paginator extends HTMLElement {
   }
   #onTouchEnd(e) {
     const state = this.#touchState
+    if (!state) {
+      this.#touchScrolled = false
+      return
+    }
     this.dispatchEvent(new CustomEvent('doctouchend', {
       detail: {
         touch: e.changedTouches[0],
@@ -976,7 +1150,7 @@ export class Paginator extends HTMLElement {
 
     this.#touchScrolled = false
     if (this.scrolled) {
-      this.#touchState = null
+      if (this.#touchState === state) this.#touchState = null
       return
     }
 
@@ -987,7 +1161,7 @@ export class Paginator extends HTMLElement {
     if (verticalLocked) {
       // Restore original horizontal position and skip snapping to avoid accidental page turns
       this.#container.scrollLeft = state.lockedOffset
-      this.#touchState = null
+      if (this.#touchState === state) this.#touchState = null
       if (this.#pendingRelocate) {
         const detail = this.#pendingRelocate
         this.#pendingRelocate = null
@@ -1000,11 +1174,15 @@ export class Paginator extends HTMLElement {
     // XXX: Firefox seems to report scale as 1... sometimes...?
     // at this point I'm basically throwing `requestAnimationFrame` at
     // anything that doesn't work
-    requestAnimationFrame(() => {
-      if (globalThis.visualViewport.scale === 1 && state)
+    this.#pendingTouchEndFrame = requestAnimationFrame(() => {
+      this.#pendingTouchEndFrame = null
+      if (globalThis.visualViewport.scale === 1
+        && this.#touchState === state)
         Promise.resolve(this.snap(state.vx, state.vy, state))
-          .finally(() => { this.#touchState = null })
-      else this.#touchState = null
+          .finally(() => {
+            if (this.#touchState === state) this.#touchState = null
+          })
+      else if (this.#touchState === state) this.#touchState = null
     })
   }
   // allows one to process rects as if they were LTR and horizontal
@@ -1042,50 +1220,66 @@ export class Paginator extends HTMLElement {
   async #scrollTo(offset, reason, smooth) {
     const element = this.#container
     const { scrollProp, size } = this
-    this.#ignoreNativeScroll = true
-    
     const opts = typeof smooth === 'object' ? smooth ?? {} : {}
     const shouldAnimate = opts.animate ?? (reason === 'snap' || smooth === true)
     const easing = opts.easing ?? easeOutSine
-    
-    const finish = () => {
-      this.#afterScroll(reason)
-      this.#ignoreNativeScroll = false
-    }
-
-    // If already at target position
-    if (Math.abs(element[scrollProp] - offset) < 1) {
-      finish()
-      return
-    }
 
     // FIXME: vertical-rl only, not -lr
     if (this.scrolled && this.#vertical) offset = -offset
 
     const useAnimation = shouldAnimate && this.hasAttribute('animated')
+    this.#cancelActiveAnimation()
+    const generation = ++this.#animationGeneration
+    let controller
+    this.#ignoreNativeScroll = true
 
-    if (useAnimation) {
-      const distance = Math.abs(element[scrollProp] - offset)
-      const duration = opts.duration ?? Math.max(200, Math.min(300, 250 * (distance / (size || 1))))
+    const isCurrent = () => generation === this.#animationGeneration
+    const finish = () => {
+      if (!isCurrent()) return false
+      this.#afterScroll(reason)
+      return true
+    }
 
-      this.#justAnchored = true
+    try {
+      // If already at target position
+      if (Math.abs(element[scrollProp] - offset) < 1) return finish()
 
-      return animate(
-        element[scrollProp],
-        offset,
-        duration,
-        easing,
-        x => element[scrollProp] = x,
-      ).then(() => {
-        // Ensure exact position
+      if (useAnimation) {
+        const distance = Math.abs(element[scrollProp] - offset)
+        const duration = opts.duration
+          ?? Math.max(200, Math.min(300, 250 * (distance / (size || 1))))
+
+        controller = { cancelled: false, cancel: null }
+        this.#animationController = controller
+        this.#justAnchored = true
+
+        const completed = await animate(
+          element[scrollProp],
+          offset,
+          duration,
+          easing,
+          x => {
+            if (isCurrent() && !controller.cancelled)
+              element[scrollProp] = x
+          },
+          controller,
+        )
+        if (!completed || !isCurrent()) return false
+
+        // Ensure exact position after the final valid frame.
         element[scrollProp] = offset
-        finish()
-      }).catch(() => {
-        this.#ignoreNativeScroll = false
-      })
-    } else {
+        return finish()
+      }
+
+      if (!isCurrent()) return false
       element[scrollProp] = offset
-      finish()
+      return finish()
+    } finally {
+      if (isCurrent()) {
+        if (this.#animationController === controller)
+          this.#animationController = null
+        this.#ignoreNativeScroll = false
+      }
     }
   }
   async #scrollToPage(page, reason, smooth) {
@@ -1199,12 +1393,17 @@ export class Paginator extends HTMLElement {
     //   }
     // }
   }
-  async #display(promise) {
+  async #display(promise, generation) {
     const { index, src, anchor, onLoad, select } = await promise
+    if (generation !== this.#navigationGeneration
+      || !this.#canGoToIndex(index)) return false
+
+    const previousIndex = this.#index
     this.#index = index
     if (src) {
       const view = this.#createView()
       const afterLoad = doc => {
+        if (generation !== this.#navigationGeneration) return
         if (doc.head) {
           const $styleBefore = doc.createElement('style')
           doc.head.prepend($styleBefore)
@@ -1214,8 +1413,17 @@ export class Paginator extends HTMLElement {
         }
         onLoad?.({ doc, index })
       }
-      const beforeRender = this.#beforeRender.bind(this)
+      const beforeRender = detail => generation === this.#navigationGeneration
+        ? this.#beforeRender(detail)
+        : null
       await view.load(src, afterLoad, beforeRender)
+      if (generation !== this.#navigationGeneration) {
+        this.#index = previousIndex
+        view.destroy()
+        view.element.remove()
+        if (this.#view === view) this.#view = null
+        return false
+      }
       this.dispatchEvent(new CustomEvent('create-overlayer', {
         detail: {
           doc: view.document, index,
@@ -1226,55 +1434,75 @@ export class Paginator extends HTMLElement {
     }
     await this.scrollToAnchor((typeof anchor === 'function'
       ? anchor(this.#view.document) : anchor) ?? 0, select)
+    return generation === this.#navigationGeneration
   }
   #canGoToIndex(index) {
     return index >= 0 && index <= this.sections.length - 1
   }
-  async #goTo({ index, anchor, select }) {
-    if (index === this.#index) await this.#display({ index, anchor, select })
+  async #goTo({ index, anchor, select }, generation) {
+    if (generation !== this.#navigationGeneration
+      || !this.#canGoToIndex(index)) return false
+
+    if (index === this.#index)
+      return this.#display({ index, anchor, select }, generation)
     else {
       const oldIndex = this.#index
       const onLoad = detail => {
+        if (generation !== this.#navigationGeneration) return
         this.sections[oldIndex]?.unload?.()
         this.setStyles(this.#styles)
         this.dispatchEvent(new CustomEvent('load', { detail }))
       }
-      await this.#display(Promise.resolve(this.sections[index].load())
+      return this.#display(Promise.resolve(this.sections[index].load())
         .then(src => ({ index, src, anchor, onLoad, select }))
         .catch(e => {
           console.warn(e)
           console.warn(new Error(`Failed to load section ${index}`))
           return {}
-        }))
+        }), generation)
     }
   }
   async goTo(target) {
-    if (this.#locked) return
     const resolved = await target
-    if (this.#canGoToIndex(resolved.index)) return this.#goTo(resolved)
+    if (this.#canGoToIndex(resolved.index))
+      await this.#enqueueNavigation({ type: 'go-to', target: resolved })
   }
-  #scrollPrev(distance) {
-    if (!this.#view) return true
+  async #scrollPrev(distance) {
+    if (!this.#view) return { completed: true, boundary: true }
     if (this.scrolled) {
-      if (this.start > 0) return this.#scrollTo(
-        Math.max(0, this.start - (distance ?? this.size)), null, { animate: true })
-      return true
+      if (this.start > 0) {
+        const completed = await this.#scrollTo(
+          Math.max(0, this.start - (distance ?? this.size)),
+          null,
+          { animate: true },
+        )
+        return { completed, boundary: false }
+      }
+      return { completed: true, boundary: true }
     }
-    if (this.atStart) return
+    if (this.atStart) return { completed: true, boundary: false }
     const page = this.page - 1
-    return this.#scrollToPage(page, 'page', { animate: true }).then(() => page <= 0)
+    const completed = await this.#scrollToPage(page, 'page', { animate: true })
+    return { completed, boundary: completed && page <= 0 }
   }
-  #scrollNext(distance) {
-    if (!this.#view) return true
+  async #scrollNext(distance) {
+    if (!this.#view) return { completed: true, boundary: true }
     if (this.scrolled) {
-      if (this.viewSize - this.end > 2) return this.#scrollTo(
-        Math.min(this.viewSize, distance ? this.start + distance : this.end), null, { animate: true })
-      return true
+      if (this.viewSize - this.end > 2) {
+        const completed = await this.#scrollTo(
+          Math.min(this.viewSize, distance ? this.start + distance : this.end),
+          null,
+          { animate: true },
+        )
+        return { completed, boundary: false }
+      }
+      return { completed: true, boundary: true }
     }
-    if (this.atEnd) return
+    if (this.atEnd) return { completed: true, boundary: false }
     const page = this.page + 1
     const pages = this.pages
-    return this.#scrollToPage(page, 'page', { animate: true }).then(() => page >= pages - 1)
+    const completed = await this.#scrollToPage(page, 'page', { animate: true })
+    return { completed, boundary: completed && page >= pages - 1 }
   }
   get atStart() {
     return this.#adjacentIndex(-1) == null && this.page <= 1
@@ -1286,18 +1514,29 @@ export class Paginator extends HTMLElement {
     for (let index = this.#index + dir; this.#canGoToIndex(index); index += dir)
       if (this.sections[index]?.linear !== 'no') return index
   }
-  async #turnPage(dir, distance) {
-    // if (this.#locked) return
-    this.#locked = true
+  async #performTurn({ dir, distance }, generation) {
     const prev = dir === -1
-    const shouldGo = await (prev ? this.#scrollPrev(distance) : this.#scrollNext(distance))
-    
-    if (shouldGo) await this.#goTo({
-      index: this.#adjacentIndex(dir),
-      anchor: prev ? () => 1 : () => 0,
-    })
-    if (shouldGo || !this.hasAttribute('animated')) await wait(100)
-    this.#locked = false
+    const result = await (prev
+      ? this.#scrollPrev(distance)
+      : this.#scrollNext(distance))
+    if (!result.completed || generation !== this.#navigationGeneration)
+      return false
+
+    if (result.boundary) {
+      const index = this.#adjacentIndex(dir)
+      if (index != null) {
+        const completed = await this.#goTo({
+          index,
+          anchor: prev ? () => 1 : () => 0,
+        }, generation)
+        if (!completed) return false
+      }
+    }
+    if (result.boundary || !this.hasAttribute('animated')) await wait(100)
+    return generation === this.#navigationGeneration
+  }
+  async #turnPage(dir, distance) {
+    await this.#enqueueNavigation({ type: 'turn', dir, distance })
   }
   prev(distance) {
     return this.#turnPage(-1, distance)
@@ -1347,14 +1586,29 @@ export class Paginator extends HTMLElement {
     return this.#view?.writingMode
   }
   destroy() {
+    this.#navigationGeneration++
+    this.#clearPendingNavigation()
+    this.#cancelActiveAnimation()
+    this.#locked = false
+    this.#activeNavigation = null
+    this.#isSnapping = false
+    this.#ignoreNativeScroll = false
     this.#observer.unobserve(this)
-    this.#view.destroy()
+    this.#view?.destroy()
     this.#view = null
     this.sections[this.#index]?.unload?.()
     this.#mediaQuery.removeEventListener('change', this.#mediaQueryListener)
     if (this.#pendingScrollFrame) {
       cancelAnimationFrame(this.#pendingScrollFrame)
       this.#pendingScrollFrame = null
+    }
+    if (this.#pendingTouchEndFrame) {
+      cancelAnimationFrame(this.#pendingTouchEndFrame)
+      this.#pendingTouchEndFrame = null
+    }
+    if (this.#touchDocument) {
+      this.#removeTouchListeners(this.#touchDocument)
+      this.#touchDocument = null
     }
     this.#pendingRelocate = null
   }

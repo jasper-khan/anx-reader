@@ -3,11 +3,23 @@ package com.anxcye.anx_reader
 import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : AudioServiceActivity() {
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        @Suppress("DEPRECATION")
+        val highestRefreshRate = windowManager.defaultDisplay.supportedModes
+            .maxOf { it.refreshRate }
+        window.attributes = window.attributes.apply {
+            preferredRefreshRate = highestRefreshRate
+        }
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
