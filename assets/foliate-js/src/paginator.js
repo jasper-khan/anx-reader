@@ -465,7 +465,6 @@ export class Paginator extends HTMLElement {
   #loadingNext = false
   #loadingPrev = false
   #pendingRelocate = null
-  #isSnapping = false
   #animationController = null
   #animationGeneration = 0
   #navigationGeneration = 0
@@ -591,6 +590,7 @@ export class Paginator extends HTMLElement {
     this.#observer.observe(this.#container)
     this.#container.addEventListener('scroll', () => {
       if (this.#ignoreNativeScroll) return
+      if (!this.#view) return
       if (this.#justAnchored) {
         this.#justAnchored = false
         return
@@ -969,7 +969,6 @@ export class Paginator extends HTMLElement {
     const duration = Math.max(200, Math.min(300, 250 * (distance / (size || 1))))
 
     const pageArg = this.#rtl ? -targetPage : targetPage
-    this.#isSnapping = true
 
     try {
       const completed = await this.#scrollToPage(
@@ -987,7 +986,6 @@ export class Paginator extends HTMLElement {
       }
       return true
     } finally {
-      this.#isSnapping = false
       // Restore overflow after snap is complete or cancelled.
       element.style[overflowProp] = prevOverflow
     }
@@ -1580,7 +1578,10 @@ export class Paginator extends HTMLElement {
     this.#applyBackground()
 
     // needed because the resize observer doesn't work in Firefox
-    this.#view?.document?.fonts?.ready?.then(() => this.#view.expand())
+    const view = this.#view
+    view?.document?.fonts?.ready?.then(() => {
+      if (this.#view === view) view.expand()
+    })
   }
   get writingMode() {
     return this.#view?.writingMode
@@ -1589,9 +1590,12 @@ export class Paginator extends HTMLElement {
     this.#navigationGeneration++
     this.#clearPendingNavigation()
     this.#cancelActiveAnimation()
+    if (this.#pendingScrollTimer) {
+      clearTimeout(this.#pendingScrollTimer)
+      this.#pendingScrollTimer = null
+    }
     this.#locked = false
     this.#activeNavigation = null
-    this.#isSnapping = false
     this.#ignoreNativeScroll = false
     this.#observer.unobserve(this)
     this.#view?.destroy()

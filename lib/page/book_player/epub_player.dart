@@ -994,7 +994,6 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     supportZoom: false,
     transparentBackground: !AnxPlatform.isAndroid,
     isInspectable: kDebugMode,
-    hardwareAcceleration: true,
     useHybridComposition: false,
   );
 
