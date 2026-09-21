@@ -64,6 +64,6 @@ jobs:
         with:
           name: windows-artifacts
           path: |
-            build/windows/*.zip
-            build/windows/*.exe
+            build/windows/Anx-Reader-windows-*.zip
+            build/windows/Anx-Reader-windows-*.exe
           if-no-files-found: error
