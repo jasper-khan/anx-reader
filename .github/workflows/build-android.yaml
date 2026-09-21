@@ -48,12 +48,19 @@ jobs:
           check-latest: true
 
       - name: Setup Android signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/keystore.jks        
-          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties    
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties    
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties    
-          echo "storeFile=keystore.jks" >> android/key.properties
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
+          {
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'storeFile=keystore.jks\n'
+          } > android/key.properties
 
       - name: Build for Android
         run: |
