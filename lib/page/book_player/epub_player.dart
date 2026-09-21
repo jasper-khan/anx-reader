@@ -90,6 +90,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
   OverlayEntry? contextMenuEntry;
   AnimationController? _animationController;
   Animation<double>? _animation;
+  late final String _bookCapability;
   bool showHistory = false;
   bool canGoBack = false;
   bool canGoForward = false;
@@ -983,6 +984,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
         _animationController!.forward();
       });
     }
+    _bookCapability = Server().registerBookPath(widget.book.fileFullPath);
     super.initState();
   }
 
@@ -1009,6 +1011,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
     _animationController?.dispose();
     saveReadingProgress();
     removeOverlay();
+    Server().unregisterBook(_bookCapability);
     super.dispose();
   }
 
@@ -1284,8 +1287,7 @@ class EpubPlayerState extends ConsumerState<EpubPlayer>
 
   @override
   Widget build(BuildContext context) {
-    String uri = Uri.encodeComponent(widget.book.fileFullPath);
-    String url = 'http://127.0.0.1:${Server().port}/book/$uri';
+    String url = 'http://127.0.0.1:${Server().port}/book/$_bookCapability';
     String initialCfi = widget.cfi ?? widget.book.lastReadPosition;
 
     return Listener(

@@ -9,9 +9,6 @@ on:
       version:
         required: true
         type: string
-      is_beta:
-        required: true
-        type: string
       release_notes:
         required: true
         type: string
@@ -45,4 +42,4 @@ jobs:
             artifacts/windows-artifacts/*.exe
           body: ${{ inputs.release_notes }}
           generate_release_notes: false
-          prerelease: ${{ inputs.is_beta == 'true' }}
+          prerelease: false

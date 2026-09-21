@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math';
+
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
-import 'package:anx_reader/utils/log/common.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:shelf/shelf.dart' as shelf;
@@ -18,116 +19,120 @@ class Server {
   Server._internal();
 
   HttpServer? _server;
+  final Random _random = Random.secure();
+  final Map<String, String> _bookCapabilities = <String, String>{};
 
-  Future start() async {
+  Future<void> start() async {
     if (_server != null) {
-      AnxLog.info(
-        'Server: Existing instance detected on port ${_server?.port}, restarting',
-      );
       await stop();
     }
 
-    var handler = const shelf.Pipeline()
-        .addMiddleware(shelf.logRequests())
-        .addHandler(_handleRequests);
+    final handler = const shelf.Pipeline().addHandler(_handleRequests);
 
-    int port = Prefs().lastServerPort;
+    final int port = Prefs().lastServerPort;
 
     try {
       _server = await io.serve(handler, '127.0.0.1', port);
     } catch (e, s) {
-      AnxLog.warning(
-          'Server: Failed to bind to port $port, trying random port $e', s);
       _server = await io.serve(handler, '127.0.0.1', 0);
+      // Keep the fallback quiet about request data, while retaining the
+      // original bind failure for diagnosing a stale saved port.
+      stderr.writeln('Server: failed to bind saved port $port: $e\n$s');
     }
 
     Prefs().lastServerPort = _server!.port;
-    AnxLog.info(
-        'Server: Serving at http://${_server?.address.host}:${_server?.port}');
   }
 
   int get port {
     return _server!.port;
   }
 
-  Future stop() async {
+  Future<void> stop() async {
     if (_server == null) {
       return;
     }
-    final stoppedPort = _server!.port;
     await _server?.close(force: true);
     _server = null;
-    AnxLog.info('Server: Server stopped (port $stoppedPort)');
+    // Keep capabilities across a restart. iOS may restart the listener while
+    // an existing WebView still holds its book URL.
   }
 
-  Future<String> _loadAsset(String path) async {
-    return await rootBundle.loadString(path);
+  String registerBookPath(String filePath) {
+    final canonicalPath = _resolveCanonicalFile(File(filePath));
+    if (canonicalPath == null) {
+      throw StateError('Book file is not available');
+    }
+
+    final suffix = _bookFileSuffix(canonicalPath);
+
+    String capability;
+    do {
+      capability = '${_newCapability()}$suffix';
+    } while (_bookCapabilities.containsKey(capability));
+    _bookCapabilities[capability] = canonicalPath;
+    return capability;
   }
 
-  File? _tempFile;
-  String? _tempFileName;
+  void unregisterBook(String capability) {
+    _bookCapabilities.remove(capability);
+  }
 
-  String setTempFile(File file) {
-    _tempFile = file;
-    _tempFileName =
-        '${DateTime.now().millisecondsSinceEpoch}.${file.path.split('.').last}';
-    return _tempFileName!;
+  String _newCapability() {
+    final bytes = List<int>.generate(32, (_) => _random.nextInt(256));
+    return base64UrlEncode(bytes).replaceAll('=', '');
+  }
+
+  String _bookFileSuffix(String filePath) {
+    final lowerPath = filePath.toLowerCase();
+    for (final suffix in const [
+      '.fb2.zip',
+      '.epub',
+      '.mobi',
+      '.azw3',
+      '.fb2',
+      '.pdf',
+      '.txt',
+      '.cbz',
+      '.fbz',
+    ]) {
+      if (lowerPath.endsWith(suffix)) {
+        return suffix;
+      }
+    }
+    final extension = path.extension(lowerPath);
+    return RegExp(r'^\.[a-z0-9]{1,10}$').hasMatch(extension) ? extension : '';
+  }
+
+  Future<String> _loadAsset(String assetPath) async {
+    return rootBundle.loadString(assetPath);
   }
 
   Future<shelf.Response> _handleRequests(shelf.Request request) async {
     final uriPath = request.requestedUri.path;
-    AnxLog.info('Server: Request for $uriPath');
-
-    if (_tempFileName != null && uriPath == "/${_tempFileName!}") {
-      return shelf.Response.ok(
-        _tempFile?.openRead(),
-        headers: {
-          'Content-Type': 'application/epub+zip',
-          'Access-Control-Allow-Origin': '*',
-        },
-      );
-    }
 
     if (uriPath.startsWith('/book/')) {
       return _handleBookRequest(request);
     } else if (uriPath.startsWith('/js/')) {
-      String content = await _loadAsset('assets/js/${path.basename(uriPath)}');
+      final content = await _loadAsset('assets/js/${path.basename(uriPath)}');
       return shelf.Response.ok(
         content,
         headers: {'Content-Type': 'application/javascript'},
       );
     } else if (uriPath.startsWith('/fonts/')) {
-      Directory fontDir = getFontDir();
-      final file = File(
-          '${fontDir.path}/${path.basename(Uri.decodeComponent(uriPath))}');
-      if (!file.existsSync()) {
-        return shelf.Response.notFound('Font not found');
-      }
-      return shelf.Response.ok(
-        file.openRead(),
-        headers: {
-          'Content-Type': 'font/opentype',
-          'Access-Control-Allow-Origin': '*',
-          'cache-control': 'public, max-age=31536000',
-        },
-      );
+      return _handleFontRequest(uriPath);
     } else if (uriPath.startsWith('/foliate-js/')) {
       if (uriPath.endsWith('.epub')) {
         final file =
             await rootBundle.load('assets/foliate-js/${uriPath.substring(12)}');
         return shelf.Response.ok(
           file.buffer.asUint8List(),
-          headers: {
-            'Content-Type': 'application/epub+zip',
-            'Access-Control-Allow-Origin': '*', // Add this line
-          },
+          headers: {'Content-Type': 'application/epub+zip'},
         );
       }
-      String content =
+      final content =
           await _loadAsset('assets/foliate-js/${uriPath.substring(12)}');
 
-      // Determine content type based on file extension
-      String contentType;
+      final String contentType;
       if (uriPath.endsWith('.html')) {
         contentType = 'text/html';
       } else if (uriPath.endsWith('.css')) {
@@ -142,52 +147,161 @@ class Server {
 
       return shelf.Response.ok(
         content,
-        headers: {
-          'Content-Type': contentType,
-        },
+        headers: {'Content-Type': contentType},
       );
     } else if (uriPath.startsWith('/bgimg/')) {
-      return await _handleBgimgRequest(request);
-    } else {
-      return shelf.Response.ok(
-        'Request for "${request.url}"',
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-        },
-      );
+      return _handleBgimgRequest(request);
     }
+
+    return shelf.Response.notFound('Not found');
   }
 
   shelf.Response _handleBookRequest(shelf.Request request) {
-    final bookPath = Uri.decodeComponent(request.url.path.substring(5));
-    final file = File(bookPath);
-    AnxLog.info('Server: Request for book: $bookPath');
-    if (!file.existsSync()) {
+    final capability = request.requestedUri.path.substring('/book/'.length);
+    if (capability.isEmpty || capability.contains('/')) {
       return shelf.Response.notFound('Book not found');
     }
-    final headers = {
-      'Content-Type': 'application/epub+zip',
-      'Access-Control-Allow-Origin': '*',
-    };
-    return shelf.Response.ok(file.openRead(), headers: headers);
+
+    final registeredPath = _bookCapabilities[capability];
+    if (registeredPath == null) {
+      return shelf.Response.notFound('Book not found');
+    }
+
+    final canonicalPath = _resolveCanonicalFile(File(registeredPath));
+    if (canonicalPath == null || !_samePath(canonicalPath, registeredPath)) {
+      return shelf.Response.notFound('Book not found');
+    }
+
+    final file = File(canonicalPath);
+    return shelf.Response.ok(
+      file.openRead(),
+      headers: {'Content-Type': 'application/epub+zip'},
+    );
+  }
+
+  shelf.Response _handleFontRequest(String uriPath) {
+    final decodedName = _decodePath(uriPath.substring('/fonts/'.length));
+    if (decodedName == null || !_isSimpleFileName(decodedName)) {
+      return shelf.Response.notFound('Font not found');
+    }
+
+    final filePath = _resolveContainedFile(getFontDir(), decodedName);
+    if (filePath == null) {
+      return shelf.Response.notFound('Font not found');
+    }
+
+    return shelf.Response.ok(
+      File(filePath).openRead(),
+      headers: {
+        'Content-Type': 'font/opentype',
+        'cache-control': 'public, max-age=31536000',
+      },
+    );
   }
 
   Future<shelf.Response> _handleBgimgRequest(shelf.Request request) async {
-    final bgimgPath = Uri.decodeComponent(request.url.path.substring(6));
-    ByteBuffer? file;
+    final bgimgPath =
+        _decodePath(request.requestedUri.path.substring('/bgimg/'.length));
+    if (bgimgPath == null) {
+      return shelf.Response.notFound('Bgimg not found');
+    }
+
+    Uint8List bytes;
     if (bgimgPath.startsWith('assets/')) {
-      file = (await rootBundle.load(bgimgPath.substring(7))).buffer;
+      final assetPath = bgimgPath.substring('assets/'.length);
+      if (!assetPath.startsWith('assets/images/bgimg/') ||
+          assetPath.contains('..') ||
+          assetPath.contains('\\')) {
+        return shelf.Response.notFound('Bgimg not found');
+      }
+      try {
+        bytes = (await rootBundle.load(assetPath)).buffer.asUint8List();
+      } catch (_) {
+        return shelf.Response.notFound('Bgimg not found');
+      }
     } else if (bgimgPath.startsWith('local/')) {
-      final path =
-          getBgimgDir().path + Platform.pathSeparator + bgimgPath.substring(6);
-      file = (await File(path).readAsBytes()).buffer;
+      final localName = bgimgPath.substring('local/'.length);
+      if (!_isSimpleFileName(localName)) {
+        return shelf.Response.notFound('Bgimg not found');
+      }
+      final filePath = _resolveContainedFile(getBgimgDir(), localName);
+      if (filePath == null) {
+        return shelf.Response.notFound('Bgimg not found');
+      }
+      try {
+        bytes = await File(filePath).readAsBytes();
+      } catch (_) {
+        return shelf.Response.notFound('Bgimg not found');
+      }
     } else {
       return shelf.Response.notFound('Bgimg not found');
     }
-    final headers = {
-      'Content-Type': 'image/png',
-      'Access-Control-Allow-Origin': '*',
-    };
-    return shelf.Response.ok(file.asUint8List(), headers: headers);
+
+    return shelf.Response.ok(
+      bytes,
+      headers: {'Content-Type': 'image/png'},
+    );
+  }
+
+  String? _decodePath(String value) {
+    try {
+      return Uri.decodeComponent(value);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  bool _isSimpleFileName(String value) {
+    return value.isNotEmpty &&
+        value != '.' &&
+        value != '..' &&
+        !value.contains('/') &&
+        !value.contains('\\');
+  }
+
+  String? _resolveContainedFile(Directory root, String fileName) {
+    try {
+      final rootPath = path.normalize(root.resolveSymbolicLinksSync());
+      final candidate = File(path.join(rootPath, fileName));
+      if (!candidate.existsSync()) {
+        return null;
+      }
+      final candidatePath =
+          path.normalize(candidate.resolveSymbolicLinksSync());
+      if (!_isWithinDirectory(rootPath, candidatePath)) {
+        return null;
+      }
+      return candidatePath;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _resolveCanonicalFile(File file) {
+    try {
+      if (!file.existsSync()) {
+        return null;
+      }
+      final canonicalPath = path.normalize(file.resolveSymbolicLinksSync());
+      return File(canonicalPath).existsSync() ? canonicalPath : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isWithinDirectory(String rootPath, String candidatePath) {
+    final relativePath = path.relative(candidatePath, from: rootPath);
+    return relativePath != '.' &&
+        relativePath != '..' &&
+        !relativePath.startsWith('..${Platform.pathSeparator}') &&
+        !path.isAbsolute(relativePath);
+  }
+
+  bool _samePath(String first, String second) {
+    if (Platform.isWindows) {
+      return path.normalize(first).toLowerCase() ==
+          path.normalize(second).toLowerCase();
+    }
+    return path.normalize(first) == path.normalize(second);
   }
 }

@@ -17,7 +17,6 @@ Future<bool> performStorageMigration({
 }) async {
   // Items to migrate: 5 folders + 1 log file = 6 items
   final dataFolders = ['file', 'cover', 'font', 'bgimg', 'databases'];
-  final successfullyMigrated = <String>[];
   const int totalItems = 6; // 5 folders + 1 log file
 
   try {
@@ -41,7 +40,6 @@ Future<bool> performStorageMigration({
 
       // Copy all contents
       await _copyDirectory(sourceDir, destDir);
-      successfullyMigrated.add(folder);
 
       AnxLog.info('StorageMigration: Copied $folder successfully');
     }
@@ -57,24 +55,11 @@ Future<bool> performStorageMigration({
       AnxLog.info('StorageMigration: Copied log file successfully');
     }
 
-    // All copies successful, now delete old data
+    // Keep the source data as a backup. Deleting folders one by one here can leave the
+    // current storage path incomplete if a later delete fails (for example,
+    // while the database is still held by another process).
     AnxLog.info(
-        'StorageMigration: All data copied, cleaning up source data...');
-    for (final folder in successfullyMigrated) {
-      final sourceDir =
-          Directory('$sourcePath${Platform.pathSeparator}$folder');
-      if (sourceDir.existsSync()) {
-        await sourceDir.delete(recursive: true);
-        AnxLog.info('StorageMigration: Deleted source $folder');
-      }
-    }
-
-    // Delete source log file
-    if (sourceLogFile.existsSync()) {
-      await sourceLogFile.delete();
-    }
-
-    AnxLog.info('StorageMigration: Completed successfully');
+        'StorageMigration: All data copied successfully; source retained as a backup');
     return true;
   } catch (e) {
     AnxLog.severe('StorageMigration failed: $e');

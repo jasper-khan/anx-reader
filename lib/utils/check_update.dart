@@ -11,6 +11,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+const _releaseApi =
+    'https://api.github.com/repos/jasper-khan/anx-reader/releases/latest';
+const _releasePage =
+    'https://github.com/jasper-khan/anx-reader/releases/latest';
+
 Future<void> checkUpdate(bool manualCheck) async {
   if (!EnvVar.enableCheckUpdate) {
     return;
@@ -23,37 +28,42 @@ Future<void> checkUpdate(bool manualCheck) async {
   }
   Prefs().lastShowUpdate = DateTime.now();
 
-  BuildContext context = navigatorKey.currentContext!;
-  Response response;
+  final context = navigatorKey.currentContext;
+  if (context == null) return;
+
+  late final Map<String, dynamic> release;
+  late final String newVersion;
+  late final String currentVersion;
+  late final bool needUpdate;
+  final dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 10),
+    headers: {'Accept': 'application/vnd.github+json'},
+  ));
   try {
-    response = await Dio().get('https://api.anx.anxcye.com/api/info/latest');
+    final response = await dio.get<Map<String, dynamic>>(_releaseApi);
+    final data = response.data;
+    if (data == null ||
+        data['draft'] != false ||
+        data['prerelease'] != false ||
+        data['tag_name'] is! String) {
+      throw const FormatException('Invalid stable GitHub release');
+    }
+    release = data;
+    newVersion = (data['tag_name'] as String).replaceFirst(RegExp(r'^v'), '');
+    currentVersion = (await getAppVersion()).split('+').first;
+    needUpdate = isNewerAppVersion(newVersion, currentVersion);
   } catch (e) {
-    if (manualCheck) {
+    if (manualCheck && context.mounted) {
       AnxToast.show(L10n.of(context).commonFailed);
     }
     AnxLog.severe('Update: Failed to check for updates $e');
     return;
+  } finally {
+    dio.close();
   }
-  String newVersion = response.data['version'].toString().substring(1);
-  String currentVersion = (await getAppVersion()).split('+').first;
+  if (!context.mounted) return;
   AnxLog.info('Update: new version $newVersion');
-
-  List<String> newVersionList = newVersion.split('.');
-  List<String> currentVersionList = currentVersion.split('.');
-  AnxLog.info(
-      'Current version: $currentVersionList, New version: $newVersionList');
-  bool needUpdate = false;
-  for (int i = 0; i < newVersionList.length; i++) {
-    int newVer = int.parse(newVersionList[i]);
-    int curVer = int.parse(currentVersionList[i]);
-    if (newVer > curVer) {
-      needUpdate = true;
-      break;
-    } else if (newVer < curVer) {
-      needUpdate = false;
-      break;
-    }
-  }
 
   if (needUpdate) {
     if (manualCheck) {
@@ -61,8 +71,7 @@ Future<void> checkUpdate(bool manualCheck) async {
     }
     SmartDialog.show(
       builder: (BuildContext context) {
-        final body =
-            response.data['body'].toString().split('\n').skip(1).join('\n');
+        final body = release['body'] as String? ?? '';
         return AlertDialog(
           title: Text(L10n.of(context).commonNewVersion,
               style: const TextStyle(
@@ -83,19 +92,10 @@ $body'''),
             ),
             TextButton(
               onPressed: () {
-                launchUrl(
-                    Uri.parse(
-                        'https://github.com/Anxcye/anx-reader/releases/latest'),
+                launchUrl(Uri.parse(_releasePage),
                     mode: LaunchMode.externalApplication);
               },
               child: Text(L10n.of(context).updateViaGithub),
-            ),
-            TextButton(
-              onPressed: () {
-                launchUrl(Uri.parse('https://anx.anxcye.com/download'),
-                    mode: LaunchMode.externalApplication);
-              },
-              child: Text(L10n.of(context).updateViaOfficialWebsite),
             ),
           ],
         );

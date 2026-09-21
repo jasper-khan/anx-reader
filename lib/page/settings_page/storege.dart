@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
+import 'package:anx_reader/dao/database.dart';
 import 'package:anx_reader/l10n/generated/L10n.dart';
 import 'package:anx_reader/providers/storage_info.dart';
 
@@ -100,7 +101,9 @@ class _StorageSettingsState extends ConsumerState<StorageSettings>
   }
 
   Future<void> _startMigration() async {
-    if (_selectedNewPath == null || _currentStoragePath == null) return;
+    final sourcePath = _currentStoragePath;
+    final destinationPath = _selectedNewPath;
+    if (destinationPath == null || sourcePath == null) return;
 
     setState(() {
       _isMigrating = true;
@@ -108,19 +111,27 @@ class _StorageSettingsState extends ConsumerState<StorageSettings>
       _migrationCurrentItem = '';
     });
 
-    final success = await performStorageMigration(
-      sourcePath: _currentStoragePath!,
-      destinationPath: _selectedNewPath!,
-      onProgress: (currentItem, progress, total) {
-        if (mounted) {
-          setState(() {
-            _migrationCurrentItem = currentItem;
-            _migrationProgress = progress;
-            _migrationTotal = total;
-          });
-        }
-      },
-    );
+    bool success = false;
+    try {
+      // Close the database before copying it. This also lets a failed
+      // migration lazily reopen the original database on the next access.
+      await DBHelper.close();
+      success = await performStorageMigration(
+        sourcePath: sourcePath,
+        destinationPath: destinationPath,
+        onProgress: (currentItem, progress, total) {
+          if (mounted) {
+            setState(() {
+              _migrationCurrentItem = currentItem;
+              _migrationProgress = progress;
+              _migrationTotal = total;
+            });
+          }
+        },
+      );
+    } catch (_) {
+      success = false;
+    }
 
     if (mounted) {
       setState(() {
@@ -128,9 +139,12 @@ class _StorageSettingsState extends ConsumerState<StorageSettings>
       });
 
       if (success) {
-        Prefs().customStoragePath = _selectedNewPath;
+        // Switch both path sources together. The database was closed above,
+        // so subsequent lazy opens use the copied database at the new path.
+        Prefs().customStoragePath = destinationPath;
+        documentPath = destinationPath;
         setState(() {
-          _currentStoragePath = _selectedNewPath;
+          _currentStoragePath = destinationPath;
           _selectedNewPath = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(

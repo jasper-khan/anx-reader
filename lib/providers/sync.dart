@@ -447,12 +447,13 @@ class Sync extends _$Sync {
             if (!result.isSuccess) {
               await DatabaseSyncManager.showSyncErrorDialog(result);
               AnxLog.severe('Database sync failed: ${result.message}');
-              // Don't throw exception, let sync continue with file sync
-              return;
+              // Do not reconcile files against the old local database after a
+              // failed database download. The caller must abort this sync.
+              throw StateError('Database sync failed: ${result.message}');
             }
           } else {
             await _showSyncAbortedDialog();
-            return;
+            throw StateError('Remote database not found');
           }
           break;
 
@@ -489,8 +490,9 @@ class Sync extends _$Sync {
             if (!result.isSuccess) {
               await DatabaseSyncManager.showSyncErrorDialog(result);
               AnxLog.severe('Database sync failed: ${result.message}');
-              // Don't throw exception, let sync continue with file sync
-              return;
+              // Do not reconcile files against the old local database after a
+              // failed database download. The caller must abort this sync.
+              throw StateError('Database sync failed: ${result.message}');
             }
           }
           break;

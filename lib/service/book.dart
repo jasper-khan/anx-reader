@@ -561,74 +561,76 @@ Future<void> getBookMetadata(
   String? md5,
   WidgetRef? ref,
 }) async {
-  String serverFileName = Server().setTempFile(file);
+  final bookCapability = Server().registerBookPath(file.path);
 
-  String cfi = '';
+  try {
+    const cfi = '';
+    final bookUrl = 'http://127.0.0.1:${Server().port}/book/$bookCapability';
 
-  String bookUrl = "http://127.0.0.1:${Server().port}/$serverFileName";
-  AnxLog.info("import start: book url: $bookUrl");
+    final AnxHeadlessWebView webview = AnxHeadlessWebView(
+      webViewEnvironment: webViewEnvironment,
+      initialUrlRequest: URLRequest(
+          url: WebUri(generateUrl(
+        bookUrl,
+        cfi,
+        importing: true,
+      ))),
+      onLoadStop: (controller, url) async {
+        controller.addJavaScriptHandler(
+            handlerName: 'onMetadata',
+            callback: (args) async {
+              Map<String, dynamic> metadata = args[0];
+              String title = metadata['title'] ?? 'Unknown';
+              dynamic authorData = metadata['author'];
+              String author = authorData is String
+                  ? authorData
+                  : authorData
+                          ?.map((author) =>
+                              author is String ? author : author['name'])
+                          ?.join(', ') ??
+                      'Unknown';
 
-  AnxHeadlessWebView webview = AnxHeadlessWebView(
-    webViewEnvironment: webViewEnvironment,
-    initialUrlRequest: URLRequest(
-        url: WebUri(generateUrl(
-      bookUrl,
-      cfi,
-      importing: true,
-    ))),
-    onLoadStop: (controller, url) async {
-      controller.addJavaScriptHandler(
-          handlerName: 'onMetadata',
-          callback: (args) async {
-            Map<String, dynamic> metadata = args[0];
-            String title = metadata['title'] ?? 'Unknown';
-            dynamic authorData = metadata['author'];
-            String author = authorData is String
-                ? authorData
-                : authorData
-                        ?.map((author) =>
-                            author is String ? author : author['name'])
-                        ?.join(', ') ??
-                    'Unknown';
+              // base64 cover
+              String cover = metadata['cover'] ?? '';
+              String description = metadata['description'] ?? '';
+              saveBook(
+                file,
+                title,
+                author,
+                description,
+                md5,
+                cover,
+                provideBook: book,
+              );
+              ref?.read(bookListProvider.notifier).refresh();
+              // return;
+            });
+      },
+      onConsoleMessage: (controller, consoleMessage) {
+        if (consoleMessage.messageLevel == ConsoleMessageLevel.ERROR) {
+          headlessInAppWebView?.dispose();
+          headlessInAppWebView = null;
+          throw Exception('Webview: ${consoleMessage.message}');
+        }
+        webviewConsoleMessage(controller, consoleMessage);
+      },
+    );
 
-            // base64 cover
-            String cover = metadata['cover'] ?? '';
-            String description = metadata['description'] ?? '';
-            saveBook(
-              file,
-              title,
-              author,
-              description,
-              md5,
-              cover,
-              provideBook: book,
-            );
-            ref?.read(bookListProvider.notifier).refresh();
-            // return;
-          });
-    },
-    onConsoleMessage: (controller, consoleMessage) {
-      if (consoleMessage.messageLevel == ConsoleMessageLevel.ERROR) {
-        headlessInAppWebView?.dispose();
-        headlessInAppWebView = null;
-        throw Exception('Webview: ${consoleMessage.message}');
+    await webview.run();
+    headlessInAppWebView = webview;
+    // max 30s
+    int count = 0;
+    while (count < 300) {
+      if (headlessInAppWebView == null) {
+        return;
       }
-      webviewConsoleMessage(controller, consoleMessage);
-    },
-  );
-
-  await webview.run();
-  headlessInAppWebView = webview;
-  // max 30s
-  int count = 0;
-  while (count < 300) {
-    if (headlessInAppWebView == null) {
-      return;
+      await Future.delayed(const Duration(milliseconds: 100));
+      count++;
     }
-    await Future.delayed(const Duration(milliseconds: 100));
-    count++;
+    await headlessInAppWebView?.dispose();
+    headlessInAppWebView = null;
+    throw Exception('Import: Get book metadata timeout');
+  } finally {
+    Server().unregisterBook(bookCapability);
   }
-  await headlessInAppWebView?.dispose();
-  headlessInAppWebView = null;
-  throw Exception('Import: Get book metadata timeout');
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.15.1
+- Fix(sync): Stop file synchronization when database synchronization fails.
+- Fix(storage): Preserve source data when moving the Windows library.
+- Fix(security): Restrict local reader file access to registered resources.
+- Fix(reader): Defer visible-range measurement during touch paging.
+- Fix(ai): Exclude empty API keys from rotation.
+- Fix(update): Check this fork's GitHub Releases for updates.
+- CI: Publish stable versions only and require matching tag and app versions.
+
 ## 1.15.0
 - Chore(ui): Drop experimental forui redesign; keep Material shell and prior issue fixes
 - Fix(reader): Honor writing-direction setting for EPUBs that set writing-mode on body (e.g. vertical Japanese books) (#867)

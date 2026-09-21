@@ -9,12 +9,6 @@ on:
       version:
         description: "Version string"
         value: ${{ jobs.setup.outputs.version }}
-      is_alpha:
-        description: "Is alpha release"
-        value: ${{ jobs.setup.outputs.is_alpha }}
-      is_beta:
-        description: "Is beta release"
-        value: ${{ jobs.setup.outputs.is_beta }}
       release_notes:
         description: "Release notes"
         value: ${{ jobs.setup.outputs.release_notes }}
@@ -28,8 +22,6 @@ jobs:
     outputs:
       tag: ${{ steps.get_version.outputs.tag }}
       version: ${{ steps.get_version.outputs.version }}
-      is_alpha: ${{ steps.get_version.outputs.is_alpha }}
-      is_beta: ${{ steps.get_version.outputs.is_beta }}
       release_notes: ${{ steps.extract_release_notes.outputs.release_notes }}
       flutter_version: ${{ steps.get_flutter_version.outputs.flutter_version }}
 
@@ -43,7 +35,7 @@ jobs:
           FLUTTER_VERSION=$(cat .github/flutter-version)
           echo "flutter_version=${FLUTTER_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Get version from tag and determine release type
+      - name: Validate stable release version
         id: get_version
         shell: bash
         run: |
@@ -52,38 +44,28 @@ jobs:
 
           PUBSPEC_VERSION=$( grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f 1 )
 
-          if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-alpha\.([0-9]+)$ ]]; then
+          if [[ "$TAG" =~ ^v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
             BASE_VERSION="${BASH_REMATCH[1]}"
-            PRE_BUILD="${BASH_REMATCH[2]}"
-            echo "is_alpha=true" >> $GITHUB_OUTPUT
-            echo "is_beta=false" >> $GITHUB_OUTPUT
-            echo "version=${BASE_VERSION}-alpha.${PRE_BUILD}" >> $GITHUB_OUTPUT
-          elif [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
-            BASE_VERSION="${BASH_REMATCH[1]}"
-            PRE_BUILD="${BASH_REMATCH[2]}"
-            echo "is_alpha=false" >> $GITHUB_OUTPUT
-            echo "is_beta=true" >> $GITHUB_OUTPUT
-            echo "version=${BASE_VERSION}-beta.${PRE_BUILD}" >> $GITHUB_OUTPUT
-          elif [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            BASE_VERSION="${BASH_REMATCH[1]}"
-            echo "is_alpha=false" >> $GITHUB_OUTPUT
-            echo "is_beta=false" >> $GITHUB_OUTPUT
             echo "version=${BASE_VERSION}" >> $GITHUB_OUTPUT
           else
-            echo "::error::Unsupported tag format: ${TAG}" >&2
+            echo "::error::Use a stable version tag such as v1.15.1: ${TAG}" >&2
             exit 1
           fi
 
           if [[ "${BASE_VERSION}" != "${PUBSPEC_VERSION}" ]]; then
-            echo "::warning::Tag version ${BASE_VERSION} does not match pubspec version ${PUBSPEC_VERSION}" >&2
+            echo "::error::Tag version ${BASE_VERSION} does not match pubspec version ${PUBSPEC_VERSION}" >&2
+            exit 1
           fi
 
       - name: Extract release notes
         id: extract_release_notes
         run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          MAIN_VERSION=${VERSION%%-*}
-          CHANGELOG_CONTENT=$(sed -n "/## $MAIN_VERSION/,/## /p" assets/CHANGELOG.md | sed '$d')
+          CHANGELOG_CONTENT=$(awk -v heading="## $VERSION" '
+            /^## / { if (found) exit; if ($0 == heading) found = 1 }
+            found { print }
+          ' assets/CHANGELOG.md)
           echo "release_notes<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}

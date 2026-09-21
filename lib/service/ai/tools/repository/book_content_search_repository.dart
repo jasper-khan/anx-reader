@@ -198,8 +198,14 @@ class BookContentSearchRepository {
     );
 
     _sessions[book.id] = session;
-    await session.ensureInitialized();
-    return session;
+    try {
+      await session.ensureInitialized();
+      return session;
+    } catch (_) {
+      await session.dispose();
+      _sessions.remove(book.id);
+      rethrow;
+    }
   }
 }
 
@@ -218,6 +224,7 @@ class _HeadlessSearchSession {
   Completer<void>? _readyCompleter;
   _ActiveSearch? _activeSearch;
   Timer? _disposeTimer;
+  String? _bookCapability;
 
   bool get isActive => _webView != null;
 
@@ -408,6 +415,8 @@ class _HeadlessSearchSession {
     _webView = null;
     _controller = null;
     _readyCompleter = null;
+    final bookCapability = _bookCapability;
+    _bookCapability = null;
     if (webView != null) {
       try {
         await webView.dispose();
@@ -415,6 +424,9 @@ class _HeadlessSearchSession {
         AnxLog.warning(
             'HeadlessSearchSession(${book.id}): Failed to dispose webview: $error\n$stackTrace');
       }
+    }
+    if (bookCapability != null) {
+      Server().unregisterBook(bookCapability);
     }
   }
 
@@ -475,8 +487,8 @@ class _HeadlessSearchSession {
   }
 
   String _buildBookUrl() {
-    final encodedPath = Uri.encodeComponent(book.fileFullPath);
-    final url = 'http://127.0.0.1:${Server().port}/book/$encodedPath';
+    _bookCapability ??= Server().registerBookPath(book.fileFullPath);
+    final url = 'http://127.0.0.1:${Server().port}/book/$_bookCapability';
     final initialCfi = book.lastReadPosition;
     return generateUrl(
       url,

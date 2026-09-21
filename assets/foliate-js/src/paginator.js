@@ -1325,6 +1325,14 @@ export class Paginator extends HTMLElement {
       this.start - size, this.end - size, this.#getRectMapper())
   }
   #afterScroll(reason) {
+    // During active paginated touch scrolling, defer relocation work until
+    // the gesture settles; computing the visible range traverses the EPUB DOM.
+    if (!this.scrolled && reason === 'scroll'
+      && (this.#touchState || this.#touchScrolled)) {
+      this.#pendingRelocate = null
+      return
+    }
+
     const range = this.#getVisibleRange()
     // don't set new anchor if relocation was to scroll to anchor
     if (reason !== 'anchor') this.#anchor = range
@@ -1339,11 +1347,6 @@ export class Paginator extends HTMLElement {
       detail.fraction = (page - 1) / (pages - 2)
       detail.size = 1 / (pages - 2)
     }
-    if (!this.scrolled && reason === 'scroll' && (this.#touchState || this.#touchScrolled)) {
-      this.#pendingRelocate = detail
-      return
-    }
-
     this.#pendingRelocate = null
     this.dispatchEvent(new CustomEvent('relocate', { detail }))
   }
