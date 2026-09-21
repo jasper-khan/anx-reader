@@ -2,9 +2,6 @@ name: Setup Environment
 
 on:
   workflow_call:
-    secrets:
-      NOTIFICATION_URL:
-        required: true
     outputs:
       tag:
         description: "Git tag"
@@ -24,9 +21,6 @@ on:
       flutter_version:
         description: "Flutter SDK version"
         value: ${{ jobs.setup.outputs.flutter_version }}
-      xcode_version:
-        description: "Xcode version"
-        value: ${{ jobs.setup.outputs.xcode_version }}
 
 jobs:
   setup:
@@ -38,16 +32,8 @@ jobs:
       is_beta: ${{ steps.get_version.outputs.is_beta }}
       release_notes: ${{ steps.extract_release_notes.outputs.release_notes }}
       flutter_version: ${{ steps.get_flutter_version.outputs.flutter_version }}
-      xcode_version: ${{ steps.get_xcode_version.outputs.xcode_version }}
-    
-    steps:
-      - name: Send build start notification
-        shell: bash
-        run: |
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          BASE_NOTIFICATION_URL="${{ secrets.NOTIFICATION_URL }}/Anx-Reader%20Action"
-          curl -s "$BASE_NOTIFICATION_URL/Build%20Started?url=$RUN_URL&level=timeSensitive&icon=https://github.githubassets.com/assets/GitHub-Mark-ea2971cee799.png" || echo "Notification failed, continuing..."
 
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -56,12 +42,6 @@ jobs:
         run: |
           FLUTTER_VERSION=$(cat .github/flutter-version)
           echo "flutter_version=${FLUTTER_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Read Xcode version
-        id: get_xcode_version
-        run: |
-          XCODE_VERSION=26.2
-          echo "xcode_version=${XCODE_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Get version from tag and determine release type
         id: get_version
@@ -107,4 +87,3 @@ jobs:
           echo "release_notes<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG_CONTENT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-        shell: bash
