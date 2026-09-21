@@ -385,7 +385,7 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
             }
             return books.isEmpty
                 ? const Center(child: BookshelfTips())
-                : ReorderableBuilder(
+                : ReorderableBuilder.builder(
                     // lock all index of books
                     lockedIndices: lockedIndices,
                     enableDraggable: true,
@@ -413,26 +413,7 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
                       }
                       setState(() {});
                     },
-                    children: [
-                      ...books.map(
-                        (book) {
-                          final topLevelKey = ValueKey<String>(
-                            book.first.id.toString(),
-                          );
-                          return book.length == 1
-                              ? CustomDraggable(
-                                  key: topLevelKey,
-                                  data: book.first,
-                                  child: BookFolder(books: book),
-                                )
-                              : BookFolder(
-                                  key: topLevelKey,
-                                  books: book,
-                                );
-                        },
-                      ),
-                    ],
-                    builder: (children) {
+                    childBuilder: (itemBuilder) {
                       return LayoutBuilder(builder: (context, constraints) {
                         return Column(
                           children: [
@@ -443,7 +424,7 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
                                 child: Text(L10n.of(context)
                                     .dragAndDropToCreateFolderHint)),
                             Expanded(
-                              child: GridView(
+                              child: GridView.builder(
                                 key: _gridViewKey,
                                 controller: _scrollController,
                                 padding:
@@ -456,13 +437,31 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
                                   mainAxisSpacing: 30,
                                   crossAxisSpacing: 20,
                                 ),
-                                children: children,
+                                itemCount: books.length,
+                                itemBuilder: (context, index) {
+                                  final book = books[index];
+                                  final topLevelKey = ValueKey<String>(
+                                    book.first.id.toString(),
+                                  );
+                                  final child = book.length == 1
+                                      ? CustomDraggable(
+                                          key: topLevelKey,
+                                          data: book.first,
+                                          child: BookFolder(books: book),
+                                        )
+                                      : BookFolder(
+                                          key: topLevelKey,
+                                          books: book,
+                                        );
+                                  return itemBuilder(child, index);
+                                },
                               ),
                             ),
                           ],
                         );
                       });
-                    });
+                    },
+                  );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stack) => Center(child: Text(error.toString())),

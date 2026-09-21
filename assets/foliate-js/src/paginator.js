@@ -472,6 +472,8 @@ export class Paginator extends HTMLElement {
   #pendingNavigation = null
   #touchDocument = null
   #touchMovePassive = false
+  #batchingAttributes = false
+  #needsRender = false
   #touchStartListener = e => this.#onTouchStart(e)
   #touchMoveListener = e => this.#onTouchMove(e)
   #touchEndListener = e => this.#onTouchEnd(e)
@@ -626,7 +628,14 @@ export class Paginator extends HTMLElement {
     }
     this.#mediaQuery.addEventListener('change', this.#mediaQueryListener)
   }
-  attributeChangedCallback(name, _, value) {
+  attributeChangedCallback(name, oldValue, value) {
+    if (oldValue === value) return
+
+    const render = () => {
+      if (this.#batchingAttributes) this.#needsRender = true
+      else this.render()
+    }
+
     switch (name) {
       case 'flow':
         if (this.#pendingScrollTimer) {
@@ -634,9 +643,13 @@ export class Paginator extends HTMLElement {
           this.#pendingScrollTimer = null
         }
         this.#updateTouchMoveMode()
-        this.render()
+        render()
         break
       case 'top-margin':
+        // needs explicit `render()` as the container size does not change
+        this.#top.style.setProperty('--_' + name, value)
+        render()
+        break
       case 'max-block-size':
       case 'background-color':
         this.#top.style.setProperty('--_' + name, value)
@@ -648,7 +661,7 @@ export class Paginator extends HTMLElement {
       case 'max-inline-size':
         // needs explicit `render()` as it doesn't necessarily resize
         this.#top.style.setProperty('--_' + name, value)
-        this.render()
+        render()
         break
       case 'bgimg-url':
       case 'bgimg-blur':
@@ -656,6 +669,24 @@ export class Paginator extends HTMLElement {
       case 'bgimg-fit':
         if (this.#background) this.#applyBackground()
         break
+    }
+  }
+  setAttributes(attributes) {
+    this.#batchingAttributes = true
+    this.#needsRender = false
+    try {
+      for (const [name, value] of Object.entries(attributes)) {
+        const next = value == null ? null : String(value)
+        if (this.getAttribute(name) === next) continue
+        if (next == null) this.removeAttribute(name)
+        else this.setAttribute(name, next)
+      }
+    } finally {
+      this.#batchingAttributes = false
+    }
+    if (this.#needsRender) {
+      this.#needsRender = false
+      this.render()
     }
   }
   open(book) {

@@ -1711,21 +1711,6 @@ const setStyle = (oldStyle) => {
       break
   }
 
-  reader.view.renderer.setAttribute('flow', turn.scroll ? 'scrolled' : 'paginated')
-  reader.view.renderer.setAttribute('top-margin', `${style.topMargin}px`)
-  reader.view.renderer.setAttribute('bottom-margin', `${style.bottomMargin}px`)
-  reader.view.renderer.setAttribute('gap', `${style.sideMargin}%`)
-  reader.view.renderer.setAttribute('background-color', style.backgroundColor)
-  reader.view.renderer.setAttribute('max-column-count', style.maxColumnCount)
-  reader.view.renderer.setAttribute('column-threshold', `${style.columnThreshold}px`)
-  reader.view.renderer.setAttribute('bgimg-url', style.backgroundImage)
-  reader.view.renderer.setAttribute('bgimg-blur', style.bgimgBlur ?? 0)
-  reader.view.renderer.setAttribute('bgimg-opacity', style.bgimgOpacity ?? 1)
-  reader.view.renderer.setAttribute('bgimg-fit', style.bgimgFit ?? 'cover')
-
-  turn.animated ? reader.view.renderer.setAttribute('animated', 'true')
-    : reader.view.renderer.removeAttribute('animated')
-
   const newStyle = {
     fontSize: style.fontSize,
     fontName: style.fontName,
@@ -1748,7 +1733,34 @@ const setStyle = (oldStyle) => {
     useBookStyles: style.useBookStyles,
     headingFontSize: style.headingFontSize
   }
+
+  const renderer = reader.view.renderer
+  const rendererAttributes = {
+    flow: turn.scroll ? 'scrolled' : 'paginated',
+    'top-margin': `${style.topMargin}px`,
+    'bottom-margin': `${style.bottomMargin}px`,
+    gap: `${style.sideMargin}%`,
+    'background-color': style.backgroundColor,
+    'max-column-count': style.maxColumnCount,
+    'column-threshold': `${style.columnThreshold}px`,
+    'bgimg-url': style.backgroundImage,
+    'bgimg-blur': style.bgimgBlur ?? 0,
+    'bgimg-opacity': style.bgimgOpacity ?? 1,
+    'bgimg-fit': style.bgimgFit ?? 'cover',
+    animated: turn.animated ? 'true' : null,
+  }
   reader.view.renderer.setStyles?.(getCSS(newStyle))
+
+  if (renderer.setAttributes) {
+    renderer.setAttributes(rendererAttributes)
+  } else {
+    for (const [name, value] of Object.entries(rendererAttributes)) {
+      const next = value == null ? null : String(value)
+      if (renderer.getAttribute(name) === next) continue
+      if (next == null) renderer.removeAttribute(name)
+      else renderer.setAttribute(name, next)
+    }
+  }
 
   if (!style.useBookStyles && style.fontColor) {
     fixHeadingColor(style.fontColor)

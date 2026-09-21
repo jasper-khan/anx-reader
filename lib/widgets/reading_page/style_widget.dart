@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:anx_reader/config/shared_preference_provider.dart';
@@ -59,6 +60,17 @@ class StyleWidget extends StatefulWidget {
 class StyleWidgetState extends State<StyleWidget> {
   BookStyle bookStyle = Prefs().bookStyle;
   int? currentThemeId = Prefs().readTheme.id;
+  List<FontModel>? _fontOptions;
+  String? _fontOptionsLocale;
+  bool _bookStyleNeedsSave = false;
+
+  @override
+  void dispose() {
+    if (_bookStyleNeedsSave) {
+      _saveBookStyle();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,8 +105,16 @@ class StyleWidgetState extends State<StyleWidget> {
   }
 
   List<FontModel> fonts() {
-    Directory fontDir = getFontDir();
-    List<FontModel> fontList = [
+    final locale = L10n.of(context).localeName;
+    final cachedFonts = _fontOptions;
+    if (cachedFonts != null && _fontOptionsLocale == locale) {
+      return cachedFonts;
+    }
+
+    final fontDir = getFontDir();
+    final fontFiles =
+        fontDir.listSync().whereType<File>().toList(growable: false);
+    final fontList = <FontModel>[
       FontModel(
         label: L10n.of(context).downloadFonts,
         name: 'download',
@@ -116,19 +136,9 @@ class StyleWidgetState extends State<StyleWidget> {
         path: 'system',
       ),
     ];
-    // fontDir.listSync().forEach((element) {
-    //   if (element is File) {
-    //     fontList.add(FontModel(
-    //       label: getFontNameFromFile(element),
-    //       name: 'customFont' + ,
-    //       path:
-    //           'http://127.0.0.1:${Server().port}/fonts/${element.path.split('/').last}',
-    //     ));
-    //   }
-    // });
-    // name = 'customFont' + index
-    for (int i = 0; i < fontDir.listSync().length; i++) {
-      File element = fontDir.listSync()[i] as File;
+
+    for (int i = 0; i < fontFiles.length; i++) {
+      final element = fontFiles[i];
       fontList.add(FontModel(
         label: getFontNameFromFile(element),
         name: 'customFont$i',
@@ -137,11 +147,23 @@ class StyleWidgetState extends State<StyleWidget> {
       ));
     }
 
-    return fontList;
+    _fontOptionsLocale = locale;
+    return _fontOptions = fontList;
+  }
+
+  void _invalidateFontOptions() {
+    _fontOptions = null;
+    _fontOptionsLocale = null;
+  }
+
+  void _saveBookStyle() {
+    _bookStyleNeedsSave = false;
+    unawaited(Prefs().saveBookStyleToPrefs(bookStyle));
   }
 
   Widget fontAndPageTurn() {
-    FontModel? font = fonts().firstWhere(
+    final fontOptions = fonts();
+    FontModel? font = fontOptions.firstWhere(
         (element) => element.path == Prefs().font.path,
         orElse: () => FontModel(
             label: L10n.of(context).followBook, name: 'book', path: 'book'));
@@ -195,21 +217,27 @@ class StyleWidgetState extends State<StyleWidget> {
             if (font.name == 'newFont') {
               widget.hideAppBarAndBottomBar(false);
               await importFont();
+              if (mounted) {
+                setState(_invalidateFontOptions);
+              }
               return;
             } else if (font.name == 'download') {
               widget.hideAppBarAndBottomBar(false);
-              Navigator.push(
+              await Navigator.push(
                 context,
                 MaterialPageRoute(
                     builder: (context) => const FontsSettingPage()),
               );
+              if (mounted) {
+                setState(_invalidateFontOptions);
+              }
               return;
             } else {
               epubPlayerKey.currentState!.changeFont(font);
               Prefs().font = font;
             }
           },
-          dropdownMenuEntries: fonts()
+          dropdownMenuEntries: fontOptions
               .map((font) => DropdownMenuEntry(
                     value: font,
                     label: font.label,
@@ -251,10 +279,11 @@ class StyleWidgetState extends State<StyleWidget> {
                         bookStyle.lineHeight = value;
                         widget.epubPlayerKey.currentState!
                             .changeStyle(bookStyle);
-                        Prefs().saveBookStyleToPrefs(bookStyle);
+                        _bookStyleNeedsSave = true;
                       });
                     }
                   : null,
+              onChangeEnd: enabled ? (_) => _saveBookStyle() : null,
               min: 0,
               max: 3,
               divisions: 10,
@@ -273,10 +302,11 @@ class StyleWidgetState extends State<StyleWidget> {
                     setState(() {
                       bookStyle.paragraphSpacing = value;
                       widget.epubPlayerKey.currentState!.changeStyle(bookStyle);
-                      Prefs().saveBookStyleToPrefs(bookStyle);
+                      _bookStyleNeedsSave = true;
                     });
                   }
                 : null,
+            onChangeEnd: enabled ? (_) => _saveBookStyle() : null,
             min: 0,
             max: 5,
             divisions: 10,
@@ -303,10 +333,11 @@ class StyleWidgetState extends State<StyleWidget> {
                     setState(() {
                       bookStyle.fontSize = value;
                       widget.epubPlayerKey.currentState!.changeStyle(bookStyle);
-                      Prefs().saveBookStyleToPrefs(bookStyle);
+                      _bookStyleNeedsSave = true;
                     });
                   }
                 : null,
+            onChangeEnd: enabled ? (_) => _saveBookStyle() : null,
             min: 0.5,
             max: 3.0,
             divisions: 25,

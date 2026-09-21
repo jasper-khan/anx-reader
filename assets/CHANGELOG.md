@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.15.2
+- Perf(reader): Cache font options while adjusting reading styles and save slider preferences when dragging ends.
+- Fix(fonts): Wait for imported fonts to finish copying before refreshing the font list.
+- Perf(reader): Batch layout attribute updates and skip unchanged values while preserving top-margin updates.
+- Perf(bookshelf): Build book cards on demand while preserving long-press actions and drag-to-folder behavior.
+
 ## 1.15.1
 - Fix(sync): Stop file synchronization when database synchronization fails.
 - Fix(storage): Preserve source data when moving the Windows library.

@@ -21,7 +21,7 @@ Future<void> importFont() async {
   for (var file in files) {
     final fontDir = getFontDir();
     File newFile = File(file.path!);
-    newFile.copy('${fontDir.path}/${file.name}');
+    await newFile.copy('${fontDir.path}/${file.name}');
 
     AnxToast.show(L10n.of(navigatorKey.currentContext!).commonSuccess);
   }
