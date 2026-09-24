@@ -598,6 +598,8 @@ export class Paginator extends HTMLElement {
         return
       }
       if (this.scrolled) {
+        // 100ms throttle is deliberate (live progress while scrolling);
+        // upstream #914 uses a 200ms trailing debounce here instead.
         if (this.#pendingScrollTimer) return
         this.#pendingScrollTimer = setTimeout(() => {
           this.#pendingScrollTimer = null
@@ -1356,8 +1358,16 @@ export class Paginator extends HTMLElement {
       this.start - size, this.end - size, this.#getRectMapper())
   }
   #afterScroll(reason) {
-    // During active paginated touch scrolling, defer relocation work until
-    // the gesture settles; computing the visible range traverses the EPUB DOM.
+    // Paginated mode: skip relocation while a touch gesture is active
+    // (computing the visible range traverses the whole EPUB DOM). Nothing is
+    // queued here; the relocate after the gesture comes from the following
+    // scroll frames.
+    //
+    // Scrolled mode intentionally does NOT skip (see the 100ms throttle in
+    // the scroll listener): it keeps progress updates live while scrolling.
+    // Deliberate divergence from upstream #914 (which uses a 200ms trailing
+    // debounce in scrolled mode); do not adopt upstream's version without
+    // deciding to drop live progress updates in scrolled mode.
     if (!this.scrolled && reason === 'scroll'
       && (this.#touchState || this.#touchScrolled)) {
       this.#pendingRelocate = null
