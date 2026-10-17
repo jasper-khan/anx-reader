@@ -5,6 +5,7 @@ import 'package:anx_reader/service/convert_to_epub/section.dart';
 import 'package:anx_reader/utils/get_path/get_temp_dir.dart';
 import 'package:anx_reader/utils/log/common.dart';
 import 'package:archive/archive_io.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 String _escapeXml(String value) {
@@ -16,6 +17,32 @@ String _escapeXml(String value) {
       .replaceAll("'", '&apos;');
 }
 
+/// 判断 [childPath] 是否严格位于 [parentPath] 之内（两者相等时返回 false）。
+///
+/// 用途：递归删除临时目录前做最后一道校验，确认删除目标确实在缓存目录内部。
+/// 两侧路径先规范化（absolute + normalize）再比较，标题里带进来的 `..`
+/// 等片段无法绕过判断。依赖 pubspec 中已声明的 `package:path`。
+bool isPathStrictlyInside(String parentPath, String childPath) {
+  final parent = p.normalize(p.absolute(parentPath));
+  final child = p.normalize(p.absolute(childPath));
+  return p.isWithin(parent, child);
+}
+
+/// 把书名等外部来源标题转换成可安全用作单个文件名（或目录名）段的字符串。
+///
+/// 用途：`createEpub` 用标题拼接缓存目录名与 epub 文件名。标题由 TXT 文件名
+/// 推导而来（如 `..txt`、`《..》.txt`），可能含路径分隔符或 `..`，
+/// 拼接出的路径会越出缓存目录，导致 `deleteSync(recursive: true)` 误删父目录。
+///
+/// 规则：截掉首尾空白；把路径分隔符与非法字符替换为 `_`；去掉首尾的空白与点；
+/// 结果为空时回退为随机名。中文、`《》`、括号等正常字符原样保留。
+String safeEpubFileName(String title) {
+  var name = title.trim().replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_');
+  name = name.replaceAll(RegExp(r'^[\s.]+|[\s.]+$'), '');
+  if (name.isEmpty) name = 'book_${const Uuid().v4()}';
+  return name;
+}
+
 Future<File> createEpub(
   String titleString,
   String authorString,
@@ -24,8 +51,11 @@ Future<File> createEpub(
 ) async {
   // create epub
   final cacheDir = await getAnxTempDir();
-  final epubDir = Directory('${cacheDir.path}/$titleString');
-  if (epubDir.existsSync()) {
+  final safeTitle = safeEpubFileName(titleString);
+  final epubDir = Directory('${cacheDir.path}/$safeTitle');
+  // 仅当确认目录确实位于缓存目录内部时才递归删除，防止越界删除父目录。
+  if (epubDir.existsSync() &&
+      isPathStrictlyInside(cacheDir.path, epubDir.path)) {
     epubDir.deleteSync(recursive: true);
   }
   epubDir.createSync();
@@ -151,7 +181,7 @@ ${bodyContent.isEmpty ? '' : '$bodyContent\n'}
   }
 
   // zip
-  final zipFile = File('${cacheDir.path}/$titleString.epub');
+  final zipFile = File('${cacheDir.path}/$safeTitle.epub');
   zipFile.createSync();
 
   try {
@@ -166,6 +196,9 @@ ${bodyContent.isEmpty ? '' : '$bodyContent\n'}
     rethrow;
   }
 
-  epubDir.deleteSync(recursive: true);
+  // 同样只在缓存目录内部时才清理临时目录。
+  if (isPathStrictlyInside(cacheDir.path, epubDir.path)) {
+    epubDir.deleteSync(recursive: true);
+  }
   return zipFile;
 }

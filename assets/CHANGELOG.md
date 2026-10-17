@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.15.3
+- Fix(reader): Sync upstream selection handling fixes for Android long-press, context-menu dismissal, and page-turn clicks.
+- Fix(sync): Block empty local libraries from uploading over the remote WebDAV database.
+- Fix(bookshelf): Show a clear error when the system file picker fails.
+- Fix(notes): Close the reader note menu after saving.
+- Fix(import): Sanitize book and temporary EPUB filenames, and restrict recursive cleanup to the cache directory.
+- Fix(reader): Clean up paginator listeners and progress timers to prevent stale callbacks.
+- Build: Rebuild the foliate-js bundle and fix Windows PDF.js exclusion paths.
+
 ## 1.15.2
 - Perf(reader): Cache font options while adjusting reading styles and save slider preferences when dragging ends.
 - Fix(fonts): Wait for imported fonts to finish copying before refreshing the font list.

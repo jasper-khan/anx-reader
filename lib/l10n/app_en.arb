@@ -266,8 +266,17 @@
   "importCannotGetFilePath": "Cannot get file path",
   "importSuccessRestartApp": "Import success, please restart the app",
   "importFailed": "Import failed: {error}",
+  "filePickerFailed": "Could not open the file picker:\n{error}",
+  "@filePickerFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "settingsSyncCompletedToast": "Show toast when sync completed",
   "settingsSyncAutoSync": "Auto sync",
+  "syncEmptyLibraryUploadRejected": "Upload cancelled because the local library has no books. Download remote data or add books first.",
   "settingsTranslate": "Translate",
   "settingsTranslateCurrentService": "Current Service",
   "settingsTranslateAuto": "Auto",

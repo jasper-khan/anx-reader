@@ -62,8 +62,8 @@ module.exports = {
         test: /\.js$/,
         exclude: [
           /node_modules/,
-          /src\/vendor\/pdfjs\/pdf\.js$/, // Exclude large PDF.js file from Babel processing
-          /src\/vendor\/pdfjs\/pdf\.worker\.js$/
+          /[/\\]src[/\\]vendor[/\\]pdfjs[/\\]pdf\.js$/, // Exclude large PDF.js file from Babel processing (both / and \ separators)
+          /[/\\]src[/\\]vendor[/\\]pdfjs[/\\]pdf\.worker\.js$/
         ],
         use: {
           loader: 'babel-loader',

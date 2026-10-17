@@ -21,12 +21,20 @@ class ProgressWidget extends StatefulWidget {
 
 class _ProgressWidgetState extends State<ProgressWidget> {
   Timer? _sliderTimer;
+  Timer? _innerTimer;
   double _readProgress = 0.0;
 
   @override
   void initState() {
     super.initState();
     _readProgress = epubPlayerKey.currentState!.percentage;
+  }
+
+  @override
+  void dispose() {
+    _sliderTimer?.cancel();
+    _innerTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -69,10 +77,13 @@ class _ProgressWidgetState extends State<ProgressWidget> {
                     _sliderTimer = Timer(
                       const Duration(milliseconds: 100),
                       () async {
-                        await widget.epubPlayerKey.currentState!
-                            .goToPercentage(value);
-                        Timer(const Duration(milliseconds: 300), () {
-                          setState(() {});
+                        final player = widget.epubPlayerKey.currentState;
+                        if (player == null || !mounted) return;
+                        await player.goToPercentage(value);
+                        if (!mounted) return;
+                        _innerTimer?.cancel();
+                        _innerTimer = Timer(const Duration(milliseconds: 300), () {
+                          if (mounted) setState(() {});
                         });
                       },
                     );

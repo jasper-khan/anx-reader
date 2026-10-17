@@ -18,6 +18,7 @@ import 'package:anx_reader/utils/get_path/get_temp_dir.dart';
 import 'package:anx_reader/utils/color/hash_color.dart';
 import 'package:anx_reader/utils/platform_utils.dart';
 import 'package:anx_reader/utils/log/common.dart';
+import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/widgets/bookshelf/book_bottom_sheet.dart';
 import 'package:anx_reader/widgets/bookshelf/book_folder.dart';
 import 'package:anx_reader/widgets/bookshelf/sync_button.dart';
@@ -74,10 +75,17 @@ class BookshelfPageState extends ConsumerState<BookshelfPage>
   }
 
   Future<void> _importBook() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.any,
-      allowMultiple: true,
-    );
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AnxToast.show(L10n.of(context).filePickerFailed(e.toString()));
+      return;
+    }
 
     if (result == null) {
       return;

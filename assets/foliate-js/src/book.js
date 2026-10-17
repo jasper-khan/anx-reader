@@ -140,9 +140,86 @@ const buildRangeContextText = (range) => {
   return contextText;
 };
 
-const handleSelection = (view, doc, index) => {
+const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
+const CJK_ONLY_RE = /^[\u3400-\u9FFF\uF900-\uFAFF]+$/;
+
+const expandCjkWordRange = (range, locale = 'zh') => {
+  if (!range || typeof Intl === 'undefined'
+    || typeof Intl.Segmenter !== 'function') {
+    return range;
+  }
+
+  const trimmed = range.toString().trim();
+  if (!trimmed || !CJK_ONLY_RE.test(trimmed)) return range;
+
+  const codePoints = [...trimmed];
+  if (codePoints.length === 0 || codePoints.length > 2) return range;
+  if (range.startContainer !== range.endContainer) return range;
+  if (range.startContainer.nodeType !== Node.TEXT_NODE) return range;
+
+  const node = range.startContainer;
+  const fullText = node.textContent || '';
+  if (!fullText) return range;
+
+  let segmenter;
+  try {
+    segmenter = new Intl.Segmenter(locale || 'zh', { granularity: 'word' });
+  } catch (_) {
+    try {
+      segmenter = new Intl.Segmenter('zh', { granularity: 'word' });
+    } catch (_) {
+      return range;
+    }
+  }
+
+  const selStart = range.startOffset;
+  const selEnd = range.endOffset;
+
+  for (const { segment, index, isWordLike } of segmenter.segment(fullText)) {
+    const segEnd = index + segment.length;
+    if (selStart < index || selEnd > segEnd) continue;
+    if (!isWordLike || !CJK_CHAR_RE.test(segment)) return range;
+    if (index === selStart && segEnd === selEnd) return range;
+    try {
+      const expanded = range.cloneRange();
+      expanded.setStart(node, index);
+      expanded.setEnd(node, segEnd);
+      return expanded;
+    } catch (_) {
+      return range;
+    }
+  }
+  return range;
+};
+
+const expandAndroidCjkSelection = (doc) => {
   const selection = doc.getSelection();
   const range = getSelectionRange(selection);
+  if (!range) return;
+
+  const locale =
+    doc.documentElement?.lang
+    || doc.body?.lang
+    || 'zh';
+  const expanded = expandCjkWordRange(range, locale);
+  if (
+    expanded.startContainer === range.startContainer
+    && expanded.startOffset === range.startOffset
+    && expanded.endContainer === range.endContainer
+    && expanded.endOffset === range.endOffset
+  ) {
+    return;
+  }
+
+  try {
+    selection.removeAllRanges();
+    selection.addRange(expanded);
+  } catch (_) {}
+};
+
+const handleSelection = (view, doc, index) => {
+  const selection = doc.getSelection();
+  let range = getSelectionRange(selection);
 
   if (!range) return;
 
@@ -150,7 +227,10 @@ const handleSelection = (view, doc, index) => {
   const cfi = view.getCFI(index, range);
   const lang = 'en-US'
 
-  let text = selection.toString();
+  let text = range.toString();
+  if (!text) {
+    text = selection.toString();
+  }
   if (!text) {
     const newSelection = range.startContainer.ownerDocument.getSelection();
     newSelection.removeAllRanges();
@@ -256,8 +336,17 @@ const setSelectionHandler = (view, doc, index) => {
     if (!hasActiveSelection) return;
     hasActiveSelection = false;
     lastPointerUpRange = null;
-    doc.__anxSelectionClearedAt = Date.now();
-    doc.__anxSuppressClick = true;
+    if (window.__anxProgrammaticClear) {
+      doc.__anxSelectionClearedAt = 0;
+      doc.__anxSuppressClick = false;
+    } else {
+      doc.__anxSelectionClearedAt = Date.now();
+      doc.__anxSuppressClick = true;
+      setTimeout(() => {
+        doc.__anxSuppressClick = false;
+        doc.__anxSelectionClearedAt = 0;
+      }, 0);
+    }
     stopAutoPageSession(view);
     callFlutter('onSelectionCleared');
   };
@@ -429,6 +518,7 @@ const setSelectionHandler = (view, doc, index) => {
         longPressSettleTimer = setTimeout(() => {
           const current = getSelectionRange(doc.getSelection());
           if (!pressed || !current || !rangesEqual(pressed, current)) return;
+          expandAndroidCjkSelection(doc);
           if (shouldSkipPointerUp()) return;
           handleSelection(view, doc, index);
         }, 600);
@@ -1372,12 +1462,14 @@ class Reader {
 
     if (this.#doc?.__anxSuppressClick) {
       this.#doc.__anxSuppressClick = false;
+      this.#doc.__anxSelectionClearedAt = 0;
       return
     }
 
-    // debounce for 200ms after selection cleared
+    // Debounce only for the current selection-dismiss turn.
     const lastClearedAt = this.#doc?.__anxSelectionClearedAt ?? 0
-    if (lastClearedAt && Date.now() - lastClearedAt < 200) {
+    if (lastClearedAt && Date.now() - lastClearedAt < 50) {
+      this.#doc.__anxSelectionClearedAt = 0
       return
     }
 
@@ -1901,7 +1993,14 @@ window.showContextMenu = () => {
 
 window.getSelection = () => reader.getSelection()
 
-window.clearSelection = () => reader.view.deselect()
+window.clearSelection = () => {
+  window.__anxProgrammaticClear = true
+  try {
+    reader.view.deselect()
+  } finally {
+    window.__anxProgrammaticClear = false
+  }
+}
 
 window.addAnnotation = (annotation) => reader.addAnnotation(annotation)
 

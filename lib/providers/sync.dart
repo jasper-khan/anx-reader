@@ -102,6 +102,17 @@ class Sync extends _$Sync {
     return true;
   }
 
+  Future<bool> _rejectEmptyLibraryUploadIfNeeded() async {
+    final books = await bookDao.selectNotDeleteBooks();
+    if (books.isNotEmpty) return false;
+
+    final context = navigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      AnxToast.show(L10n.of(context).syncEmptyLibraryUploadRejected);
+    }
+    return true;
+  }
+
   Future<SyncDirection?> determineSyncDirection(
       SyncDirection requestedDirection) async {
     final client = _syncClient;
@@ -148,6 +159,9 @@ class Sync extends _$Sync {
     }
 
     if (remoteDb == null) {
+      if (await _rejectEmptyLibraryUploadIfNeeded()) {
+        return null;
+      }
       return SyncDirection.upload;
     }
 
@@ -163,6 +177,11 @@ class Sync extends _$Sync {
       }
     }
 
+    if (requestedDirection == SyncDirection.upload) {
+      if (await _rejectEmptyLibraryUploadIfNeeded()) {
+        return null;
+      }
+    }
     return requestedDirection;
   }
 
@@ -285,7 +304,9 @@ class Sync extends _$Sync {
     }
 
     try {
-      await syncDatabase(finalDirection);
+      if (!await syncDatabase(finalDirection)) {
+        return;
+      }
 
       if (await isCurrentEmpty()) {
         await _showSyncAbortedDialog();
@@ -400,9 +421,9 @@ class Sync extends _$Sync {
     ref.read(syncStatusProvider.notifier).refresh();
   }
 
-  Future<void> syncDatabase(SyncDirection direction) async {
+  Future<bool> syncDatabase(SyncDirection direction) async {
     final client = _syncClient;
-    if (client == null) return;
+    if (client == null) return false;
 
     String remoteDbFileName = 'database$currentDbVersion.db';
     RemoteFile? remoteDb = await client.readProps('anx/$remoteDbFileName');
@@ -414,6 +435,9 @@ class Sync extends _$Sync {
     try {
       switch (direction) {
         case SyncDirection.upload:
+          if (await _rejectEmptyLibraryUploadIfNeeded()) {
+            return false;
+          }
           // Use VACUUM INTO to create a snapshot, avoiding database locking/closing
           final snapshotPath = await DBHelper.prepareUploadSnapshot();
           try {
@@ -460,6 +484,9 @@ class Sync extends _$Sync {
         case SyncDirection.both:
           if (remoteDb == null ||
               remoteDb.mTime!.isBefore(localDb.lastModifiedSync())) {
+            if (await _rejectEmptyLibraryUploadIfNeeded()) {
+              return false;
+            }
             // Use VACUUM INTO to create a snapshot, avoiding database locking/closing
             final snapshotPath = await DBHelper.prepareUploadSnapshot();
             try {
@@ -507,6 +534,7 @@ class Sync extends _$Sync {
       AnxLog.severe('Failed to sync database\n$e');
       rethrow;
     }
+    return true;
   }
 
   Future<void> uploadFile(

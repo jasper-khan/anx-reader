@@ -477,6 +477,8 @@ export class Paginator extends HTMLElement {
   #touchStartListener = e => this.#onTouchStart(e)
   #touchMoveListener = e => this.#onTouchMove(e)
   #touchEndListener = e => this.#onTouchEnd(e)
+  #scrollListener
+  #loadListener
   constructor() {
     super()
     this.#root.innerHTML = `<style>
@@ -590,7 +592,7 @@ export class Paginator extends HTMLElement {
     // this.#footer = this.#root.getElementById('footer')
 
     this.#observer.observe(this.#container)
-    this.#container.addEventListener('scroll', () => {
+    this.#scrollListener = () => {
       if (this.#ignoreNativeScroll) return
       if (!this.#view) return
       if (this.#justAnchored) {
@@ -614,15 +616,17 @@ export class Paginator extends HTMLElement {
         this.#pendingScrollFrame = null
         this.#afterScroll('scroll')
       })
-    })
+    }
+    this.#container.addEventListener('scroll', this.#scrollListener)
 
     this.#addTouchListeners(this)
-    this.addEventListener('load', ({ detail: { doc } }) => {
+    this.#loadListener = ({ detail: { doc } }) => {
       if (this.#touchDocument)
         this.#removeTouchListeners(this.#touchDocument)
       this.#touchDocument = doc
       this.#addTouchListeners(doc)
-    })
+    }
+    this.addEventListener('load', this.#loadListener)
 
     this.#mediaQueryListener = () => {
       if (!this.#view) return
@@ -1641,11 +1645,14 @@ export class Paginator extends HTMLElement {
     this.#locked = false
     this.#activeNavigation = null
     this.#ignoreNativeScroll = false
-    this.#observer.unobserve(this)
+    this.#observer.unobserve(this.#container)
     this.#view?.destroy()
     this.#view = null
     this.sections[this.#index]?.unload?.()
     this.#mediaQuery.removeEventListener('change', this.#mediaQueryListener)
+    this.#container.removeEventListener('scroll', this.#scrollListener)
+    this.removeEventListener('load', this.#loadListener)
+    this.#removeTouchListeners(this)
     if (this.#pendingScrollFrame) {
       cancelAnimationFrame(this.#pendingScrollFrame)
       this.#pendingScrollFrame = null

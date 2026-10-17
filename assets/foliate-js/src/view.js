@@ -289,9 +289,31 @@ export class View extends HTMLElement {
   }
 
   #handleClick(doc) {
+    let hadSelectionOnPointerDown = false
+    doc.addEventListener('pointerdown', e => {
+      if (typeof e.button === 'number' && e.button !== 0) return
+      const selection = doc.getSelection()
+      hadSelectionOnPointerDown = !!(
+        selection && selection.type === 'Range'
+      )
+    }, true)
+
     doc.addEventListener('click', e => {
+      if (typeof e.button === 'number' && e.button !== 0) return
+
       if (window.isFootNoteOpen() && !e.currentTarget.__isFootNote) {
         window.closeFootNote()
+        return
+      }
+
+      if (hadSelectionOnPointerDown) {
+        hadSelectionOnPointerDown = false
+        try {
+          const selection = doc.getSelection()
+          if (selection && selection.type === 'Range') {
+            selection.removeAllRanges()
+          }
+        } catch (_) {}
         return
       }
 
@@ -325,6 +347,7 @@ export class View extends HTMLElement {
       this.#emit('click-view', { x: clientX, y: clientY })
     })
     this.renderer.addEventListener('click', e => {
+      if (typeof e.button === 'number' && e.button !== 0) return
       const { clientX, clientY } = e
       while (clientX > window.innerWidth) {
         clientX -= window.innerWidth

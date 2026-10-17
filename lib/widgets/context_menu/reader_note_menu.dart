@@ -13,6 +13,7 @@ class ReaderNoteMenu extends StatefulWidget {
     required this.axis,
     required this.onVisibilityChange,
     required this.onSizeChanged,
+    this.onSaved,
   });
 
   final int? noteId;
@@ -20,6 +21,7 @@ class ReaderNoteMenu extends StatefulWidget {
   final Axis axis;
   final ValueChanged<bool> onVisibilityChange;
   final VoidCallback onSizeChanged;
+  final VoidCallback? onSaved;
 
   @override
   State<ReaderNoteMenu> createState() => ReaderNoteMenuState();
@@ -109,6 +111,7 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
       bookNoteDao.updateBookNoteById(note!);
     }
     _notifySizeChange();
+    widget.onSaved?.call();
   }
 
   @override
@@ -159,15 +162,7 @@ class ReaderNoteMenuState extends State<ReaderNoteMenu> {
                     if (showSaveButton)
                       IconButton(
                         icon: const Icon(EvaIcons.checkmark_circle_2_outline),
-                        onPressed: () {
-                          saveNote();
-                          // remove focus
-                          FocusScope.of(context).unfocus();
-                          setState(() {
-                            showSaveButton = false;
-                          });
-                          _notifySizeChange();
-                        },
+                        onPressed: saveNote,
                       ),
                   ],
                 ),

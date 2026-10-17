@@ -38,7 +38,10 @@ class HTMLElementStub extends EventTargetStub {
     super()
     this.attributes = new Map()
   }
-  attachShadow() { return new ShadowRootStub() }
+  attachShadow() {
+    this.shadowRoot = new ShadowRootStub()
+    return this.shadowRoot
+  }
   getAttribute(name) { return this.attributes.get(name) ?? null }
   hasAttribute(name) { return this.attributes.has(name) }
   setAttribute(name, value) {
@@ -57,7 +60,15 @@ class HTMLElementStub extends EventTargetStub {
 }
 
 globalThis.HTMLElement = HTMLElementStub
-globalThis.ResizeObserver = class { observe() {} unobserve() {} }
+globalThis.ResizeObserver = class {
+  static instances = []
+  constructor(callback) {
+    this.callback = callback
+    ResizeObserver.instances.push(this)
+  }
+  observe(target) { this.observed = target }
+  unobserve(target) { this.unobserved = target }
+}
 globalThis.matchMedia = () => new EventTargetStub()
 globalThis.NodeFilter = {
   SHOW_ELEMENT: 1,
@@ -158,6 +169,34 @@ const baseStyle = {
   assert.equal(test.renderCount, 2, 'flow switch renders once')
   assert.equal(test.paginator.getAttribute('flow'), 'scrolled')
   assert.equal(refreshCount, 1, 'flow switch keeps refreshLayout behavior')
+}
+
+{
+  const { paginator } = makePaginator()
+  const container = paginator.shadowRoot.elements.get('container')
+  const observer = ResizeObserver.instances.at(-1)
+  assert.equal(observer.observed, container,
+    'constructor observes the container with the resize observer')
+  assert.equal(container.listeners.has('scroll'), true,
+    'constructor registers the container scroll listener')
+  assert.equal(paginator.listeners.has('touchstart'), true,
+    'constructor registers host touch listeners')
+  assert.equal(paginator.listeners.has('load'), true,
+    'constructor registers the host load listener')
+
+  paginator.sections = []
+  paginator.destroy()
+
+  assert.equal(observer.unobserved, container,
+    'destroy unobserves the container (not the host element)')
+  assert.equal(container.listeners.has('scroll'), false,
+    'destroy removes the container scroll listener')
+  assert.equal(paginator.listeners.has('touchstart'), false,
+    'destroy removes host touch listeners')
+  assert.equal(paginator.listeners.has('touchend'), false,
+    'destroy removes all host touch listeners')
+  assert.equal(paginator.listeners.has('load'), false,
+    'destroy removes the host load listener')
 }
 
 console.log('paginator attribute batching: ok')
