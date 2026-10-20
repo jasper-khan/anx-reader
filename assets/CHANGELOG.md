@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+- Sync upstream through v1.15.0-alpha.35: fixed-layout/PDF reading, notes JSON migration, WebDAV redirects, Linux support, AI configuration and desktop stability fixes.
+- Use upstream selection handling, import filename sanitization and note-menu behavior while retaining fork-specific reader performance and data protection.
+- Preserve the fork's Android package identity, update source and Android/Windows release workflow.
+- Keep strict HTTPS certificate verification; omit upstream's custom-CA switch because it bypasses verification for all invalid certificates.
+- Retain the Flutter 3.35-compatible Android purchase plugin for the fork's APK releases; upstream's Billing 8 override requires a newer Flutter SDK.
+
 ## 1.15.3
 - Fix(reader): Sync upstream selection handling fixes for Android long-press, context-menu dismissal, and page-turn clicks.
 - Fix(sync): Block empty local libraries from uploading over the remote WebDAV database.
@@ -25,7 +32,20 @@
 - CI: Publish stable versions only and require matching tag and app versions.
 
 ## 1.15.0
-- Chore(ui): Drop experimental forui redesign; keep Material shell and prior issue fixes
+- Fix(reader): Keep oversized images within the content area in continuous scroll mode while preserving their aspect ratio (#1001) Thanks @mattuylee
+- Fix(desktop): Hide the window immediately on close and bound resource cleanup with timeouts to avoid shutdown freezes (#1000) Thanks @1Cookie2gavh
+- Fix(log): Keep the app usable when log files cannot be created, written, read, or exported (#999) Thanks @1Cookie2gavh
+- Feat(ai): Add Requesty as a built-in OpenAI-compatible AI service (#994) Thanks @1Cookie2gavh
+- Fix(l10n): Restore day-count plurals in Traditional Chinese reading statistics (#993) Thanks @owgreen-dev
+- Feat(reader): Add single/double-page selection, continuous scrolling, and zoom for PDF and other fixed-layout books; fix renderer errors and restore saved page positions (#991) Thanks @Serprogramming
+- Ci(android): Play Store beta CI now completes Closed testing (alpha) and Open testing (beta) tracks so testers can download without a Console roll-out
+- Ci(android): Play Store alpha uploads to the internal track now publish as completed so testers can download without a Console roll-out
+- Fix(sync): Reject WebDAV database upload when the local library has no non-deleted books, to avoid wiping the cloud library with an empty DB (#911, #898 mitigation)
+- Feat(notes): Export/import book notes as JSON with book fingerprint (md5/title/author) for per-book migration across devices (#898, #911 escape hatch)
+- Fix(webdav): Follow 301/307/308 redirects (vendored webdav_client) so AList-style redirect strategies work (#345)
+- Fix(android): Optional setting to trust user-installed / custom CA certificates for HTTPS WebDAV (e.g. private Nextcloud) (#719)
+- Feat(sync): WebDAV URL hint — fill a writable directory; the app creates `anx/` under it
+- Feat(android): Long-press expands CJK selection to a word (Intl.Segmenter); selection handles remain freely draggable
 - Fix(reader): Honor writing-direction setting for EPUBs that set writing-mode on body (e.g. vertical Japanese books) (#867)
 - Fix(log): Silence Chromium iframe sandbox WebView warning that already had an ignore entry but failed exact match due to trailing period (#877)
 - Ci: Upgrade lock-threads to v6 and use github.token so lock-closed-issues stops failing daily on long GITHUB_TOKEN secrets
@@ -40,19 +60,37 @@
 - Fix(ai): Avoid native WebView2 crash when running book content search on Windows (#978) Thanks @bazzdug-arch
 - Perf(reader): Reduce Android reading-page scroll jank by deferring relocate during scroll (#914) Thanks @dddXzz
 - Fix(reader): Restore reader keyboard focus after clearing text selection / closing context menu (#967, #966) Thanks @zyx-31415
-- Fix(reader): Open selection menu on single-word long-press on Android (#990, #968, #900)
-- Fix(sync): Rename local book file when saving a new title so WebDAV uploads use the updated name (#989)
+- Fix(reader): Open selection menu on single-word long-press on Android (#990, #968, #900) Thanks @tobernguyen
+- Fix(sync): Strip special characters (e.g. # @ $ %) from file names on import so WebDAV servers like Jianguoyun accept uploads (#989)
 - Feat(appearance): Disable open-book animation, page transitions, and dialog motion when e-ink mode is on (#986)
-- Fix(bookshelf): Make group rename obvious (edit icon) and seed new groups with the book title instead of "..." (#972)
+- Fix(bookshelf): Make group rename more obvious with an edit icon (#972)
 - Fix(ai): Preserve Gemini thought_signature across tool-call round-trips so thinking models work with tools (#977)
 - Fix(reader): Page-turn keys clear selection and turn pages instead of panning while text is selected (#966)
 - Fix(ai): Null-safe custom provider config parsing and clearer errors when required fields or response shape are invalid (#868)
 - Fix(ai): Quick prompt chips insert into the composer for editing; long-press still sends immediately (#969)
+- Feat(linux): Add Linux AppImage and tar.gz packaging via CEF (#952)
+- Fix(ai): Make the Add Prompt button in AI settings full-width to match the surrounding rows
+- Fix(ai): Fix AI settings showing a grey error screen on fresh installs and provider edits failing to save, by restoring generated AiProvider JSON serialization with lenient converters
+- Chore(android): Target Android 16 (API 36) and upgrade to Google Play Billing Library 8 to meet Google Play requirements
 
+- Fix(reader): 连续滚动模式下将过大图片限制在内容区域内，并保持图片比例 (#1001) 感谢 @mattuylee
+- Fix(desktop): 关闭时立即隐藏窗口，并为资源清理设置超时，避免退出卡顿 (#1000) 感谢 @1Cookie2gavh
+- Fix(log): 日志文件无法创建、写入、读取或导出时安全降级，避免应用卡死或异常 (#999) 感谢 @1Cookie2gavh
+- Feat(ai): 新增内置 Requesty AI 服务，支持 OpenAI 兼容接口 (#994) 感谢 @1Cookie2gavh
+- Fix(l10n): 修复繁体中文阅读统计中的天数复数显示 (#993) 感谢 @owgreen-dev
+- Feat(reader): PDF 等固定版式书籍支持单/双页选择、连续滚动和缩放，并修复渲染器错误及阅读位置恢复 (#991) 感谢 @Serprogramming
+- Ci(android): Play 商店 beta CI 现会将版本同步发布到 Closed testing（alpha）与 Open testing（beta）并设为 completed，测试者无需在 Console 手动发布即可下载
+- Ci(android): Play 商店 alpha 上传至 internal 轨道时自动设为 completed，测试者无需在 Console 手动发布即可下载
+- Fix(sync): 本地书库无未删除书籍时拒绝上传 WebDAV 数据库，避免用空库覆盖云端 (#911, #898 缓解)
+- Feat(notes): 支持按书导出/导入笔记 JSON（含 md5/书名/作者指纹），便于跨设备迁移批注 (#898, #911 逃生舱)
+- Fix(webdav): 跟随 301/307/308 重定向（vendored webdav_client），兼容 AList 等 302 策略 (#345)
+- Fix(android): 新增可选设置以信任用户安装/自定义 CA 证书，便于私有 Nextcloud 等 HTTPS WebDAV (#719)
+- Feat(sync): WebDAV URL 提示——填写可写入目录，应用会在其下创建 `anx/`
+
+- Feat(android): 长按单字 CJK 选区通过 Intl.Segmenter 扩展为词语，仍可自由拖动手柄调整选区
 - Fix(reader): 修复部分 EPUB（如在 body 上设置竖排 writing-mode）忽略写作方向设置的问题 (#867)
 - Fix(log): 修复因句末句点导致精确匹配失败、未能屏蔽 Chromium iframe sandbox WebView 警告的问题 (#877)
 - Ci: 升级 lock-threads 至 v6 并改用 github.token，避免 lock-closed-issues 因过长 GITHUB_TOKEN 每日失败
-- Chore(ui): 撤销实验性 forui 界面改造，恢复 Material 壳层并保留此前 issue 修复
 - Feat(search): 支持应用内搜索结果显示，可配置搜索引擎和显示方式 (#894)
 - Feat(ai): 新增自动摘要延迟阈值配置，可控制重新打开书籍时的摘要触发时机 (#922)
 - Feat(ai): 让自定义用户提示词在首页 AI 标签页中可用，并与阅读器 AI 保持一致 (#853)
@@ -64,14 +102,18 @@
 - Fix(ai): 修复 Windows 上书籍内容搜索触发原生 WebView2 崩溃的问题 (#978) 感谢 @bazzdug-arch
 - Perf(reader): 优化 Android 阅读页滚动卡顿，滚动期间推迟 relocate (#914) 感谢 @dddXzz
 - Fix(reader): 修复清除选区/关闭上下文菜单后阅读器键盘焦点未恢复的问题 (#967, #966) 感谢 @zyx-31415
-- Fix(reader): 修复 Android 长按选中单字不弹出菜单的问题 (#990, #968, #900)
-- Fix(sync): 保存书名时同步重命名本地文件，避免 WebDAV 仍上传旧文件名 (#989)
+- Fix(reader): 修复 Android 长按选中单字不弹出菜单的问题 (#990, #968, #900) 感谢 @tobernguyen
+- Fix(sync): 导入时移除文件名中的特殊字符（如 # @ $ %），避免坚果云等 WebDAV 拒绝上传 (#989)
 - Feat(appearance): 开启墨水屏模式时关闭开书动画、页面转场与弹窗动画 (#986)
-- Fix(bookshelf): 分组命名入口更明显，新建分组默认使用书名而非 "..." (#972)
+- Fix(bookshelf): 分组重命名入口增加编辑图标，更加明显 (#972)
 - Fix(ai): 修复 Gemini 工具调用时缺失 thought_signature 导致思考模型报错的问题 (#977)
 - Fix(reader): 选中文本时方向键/翻页键先清除选区再翻页，避免页面平移 (#966)
 - Fix(ai): 自定义供应商配置解析更空安全，并在必填项或响应格式异常时给出明确错误 (#868)
 - Fix(ai): 快捷提示词芯片点击写入输入框以便编辑，长按仍可立即发送 (#969)
+- Feat(linux): 新增 Linux AppImage 与 tar.gz 打包支持（基于 CEF）(#952)
+- Fix(ai): AI 设置中“添加提示词”按钮改为占满整行，与上下设置项对齐
+- Fix(ai): 修复全新安装时 AI 设置页灰屏、供应商增删改无法保存的问题（恢复 AiProvider 生成式 JSON 序列化并保留宽松解析）
+- Chore(android): 目标 SDK 升级到 Android 16（API 36），并升级到 Google Play Billing Library 8，满足 Google Play 上架要求
 
 ## 1.14.0
 - Fix(translate): Remove legacy Microsoft reverse-engineered translation service and migrate saved full-text translation preference to Microsoft Azure API

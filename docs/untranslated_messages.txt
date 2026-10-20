@@ -1,6 +1,7 @@
 {
   "ar": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -33,11 +34,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "de": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -70,11 +83,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "es": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -107,11 +132,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "fr": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -144,11 +181,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "it": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -181,11 +230,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "ja": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -218,11 +279,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "ko": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -255,11 +328,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "pt": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -292,11 +377,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "ro": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -329,11 +426,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "ru": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -366,11 +475,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "tr": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -403,36 +524,23 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
-  ],
-
-  "zh": [
-    "settingsAiProviderReasoningEffort",
-    "settingsAiProviderReasoningEffortHelp",
-    "settingsAiProviderReasoningEffortAuto",
-    "settingsAiProviderReasoningEffortLow",
-    "settingsAiProviderReasoningEffortMedium",
-    "settingsAiProviderReasoningEffortHigh"
-  ],
-
-  "zh_CN": [
-    "searchDisplayMode",
-    "searchDefaultEngine",
-    "searchDisplayModePopup",
-    "searchDisplayModeFullScreen",
-    "searchDisplayModeExternal",
-    "searchAddEngine",
-    "searchManageEngines",
-    "searchEngineName",
-    "searchEngineNameRequired",
-    "searchEngineUrlTemplate",
-    "searchEngineUrlRequired",
-    "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "zh_LZH": [
     "bookDetailFileFormat",
+    "filePickerFailed",
     "settingsAiProviderReasoningEffort",
     "settingsAiProviderReasoningEffortHelp",
     "settingsAiProviderReasoningEffortAuto",
@@ -465,7 +573,18 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ],
 
   "zh_TW": [
@@ -502,6 +621,17 @@
     "searchEngineUrlTemplate",
     "searchEngineUrlRequired",
     "searchEngineUrlInvalid",
-    "searchEngineAdded"
+    "searchEngineAdded",
+    "syncEmptyLibraryUploadRejected",
+    "notesJsonExportHint",
+    "notesJsonImport",
+    "notesJsonImportTitle",
+    "notesJsonImportRisk",
+    "notesJsonImportNoMatch",
+    "notesJsonImportFuzzyWarn",
+    "notesJsonImportSuccess",
+    "notesJsonImportFailed",
+    "notesJsonImportInvalid",
+    "settingsSyncWebdavUrlHint"
   ]
 }

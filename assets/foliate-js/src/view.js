@@ -289,16 +289,19 @@ export class View extends HTMLElement {
   }
 
   #handleClick(doc) {
+    // CEF/Chromium collapses an existing selection during pointerdown, before
+    // `click`. The Range check below then misses and click-view would page-turn
+    // / toggle chrome on the dismiss click. Latch at pointerdown (capture) —
+    // same intent as mobile's "if still Range, don't emit click-view".
     let hadSelectionOnPointerDown = false
     doc.addEventListener('pointerdown', e => {
       if (typeof e.button === 'number' && e.button !== 0) return
-      const selection = doc.getSelection()
-      hadSelectionOnPointerDown = !!(
-        selection && selection.type === 'Range'
-      )
+      const sel = doc.getSelection()
+      hadSelectionOnPointerDown = !!(sel && sel.type === 'Range')
     }, true)
 
     doc.addEventListener('click', e => {
+      // Desktop: ignore right/middle click so they do not trigger page-turn zones.
       if (typeof e.button === 'number' && e.button !== 0) return
 
       if (window.isFootNoteOpen() && !e.currentTarget.__isFootNote) {
@@ -306,13 +309,12 @@ export class View extends HTMLElement {
         return
       }
 
+      // Dismiss-selection click: clear any leftover Range and do not emit click-view.
       if (hadSelectionOnPointerDown) {
         hadSelectionOnPointerDown = false
         try {
-          const selection = doc.getSelection()
-          if (selection && selection.type === 'Range') {
-            selection.removeAllRanges()
-          }
+          const sel = doc.getSelection()
+          if (sel && sel.type === 'Range') sel.removeAllRanges()
         } catch (_) {}
         return
       }

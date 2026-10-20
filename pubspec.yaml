@@ -38,8 +38,9 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   permission_handler: ^11.3.1
   webdav_client:
-    git:
-      url: https://github.com/Anxcye/webdav_client.git
+    path: third_party/webdav_client
+    # Vendored from Anxcye/webdav_client@3c6d0eb + 301/307/308 redirect follow (#345).
+    # Switch back to git ref once the fork commit can be pushed.
   fluttertoast: ^8.2.6
   dio: ^5.4.3+1
   pubspec_parse: ^1.2.3
@@ -129,8 +130,11 @@ dependencies:
       ref: 2ac799a6eeb5da74bf5080a2ba2057272fa52b78
   haptic_feedback: ^0.6.4+2
   in_app_purchase_android: ^0.4.0+8
+  webview_cef: ^0.5.1
 
 dependency_overrides:
+  webview_cef:
+    path: third_party/webview_cef
   googleai_dart:
     path: third_party/googleai_dart
   langchain_google:

@@ -1,3 +1,4 @@
+import 'package:anx_reader/utils/toast/common.dart';
 import 'dart:io';
 import 'dart:ui';
 
@@ -175,11 +176,18 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                     return;
                   }
 
-                  FilePickerResult? result =
-                      await FilePicker.platform.pickFiles(
-                    type: FileType.image,
-                    allowMultiple: false,
-                  );
+                  FilePickerResult? result;
+                  try {
+                    result = await FilePicker.platform.pickFiles(
+                      type: FileType.image,
+                      allowMultiple: false,
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    AnxToast.show(
+                        L10n.of(context).filePickerFailed(e.toString()));
+                    return;
+                  }
 
                   if (result == null) {
                     return;
@@ -319,43 +327,6 @@ class _BookDetailState extends ConsumerState<BookDetail> {
       );
     }
 
-
-    Future<void> renameBookFileToMatchTitle() async {
-      final book = widget.book;
-      final oldRelative = book.filePath;
-      final extension = path.extension(oldRelative);
-      if (extension.isEmpty) return;
-
-      var base = book.title
-          .replaceAll(RegExp(r'[<>:"/\\|?*#@$%^&+=\[\]{}`~]'), '_')
-          .replaceAll(RegExp(r'[\n\r]+'), ' ')
-          .trim();
-      base = base.replaceAll(RegExp(r'\s+'), ' ');
-      if (base.isEmpty) base = 'book';
-      if (base.length > 80) base = base.substring(0, 80).trim();
-
-      var newRelative = 'file/$base$extension';
-      if (newRelative == oldRelative) return;
-
-      final oldFull = getBasePath(oldRelative);
-      var newFull = getBasePath(newRelative);
-      final oldFile = File(oldFull);
-      if (!await oldFile.exists()) return;
-
-      if (await File(newFull).exists()) {
-        newRelative =
-            'file/$base-${DateTime.now().millisecondsSinceEpoch}$extension';
-        newFull = getBasePath(newRelative);
-      }
-
-      try {
-        await oldFile.rename(newFull);
-        book.filePath = newRelative;
-      } catch (e) {
-        AnxLog.warning('Rename book file failed: $e');
-      }
-    }
-
     Widget buildEditButton() {
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -377,17 +348,14 @@ class _BookDetailState extends ConsumerState<BookDetail> {
                       Text(L10n.of(context).bookDetailSave),
                     ],
                   ),
-                  onPressed: () async {
+                  onPressed: () {
                     setState(() {
                       isEditing = false;
+                      bookDao.updateBook(widget.book);
+                      Sync().syncData(SyncDirection.upload, ref,
+                          trigger: SyncTrigger.manual);
+                      ref.read(bookListProvider.notifier).refresh();
                     });
-                    // Keep local/WebDAV filename in sync with the displayed title (#989)
-                    await renameBookFileToMatchTitle();
-                    await bookDao.updateBook(widget.book);
-                    Sync().syncData(SyncDirection.upload, ref,
-                        trigger: SyncTrigger.manual);
-                    ref.read(bookListProvider.notifier).refresh();
-                    if (mounted) setState(() {});
                   },
                 )
               : OutlinedButton(

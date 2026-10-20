@@ -24,6 +24,7 @@ import 'package:anx_reader/utils/toast/common.dart';
 import 'package:anx_reader/utils/get_path/get_base_path.dart';
 import 'package:anx_reader/config/shared_preference_provider.dart';
 import 'package:anx_reader/dao/book.dart';
+import 'package:anx_reader/service/notes/notes_json.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -102,13 +103,25 @@ class Sync extends _$Sync {
     return true;
   }
 
-  Future<bool> _rejectEmptyLibraryUploadIfNeeded() async {
-    final books = await bookDao.selectNotDeleteBooks();
-    if (books.isNotEmpty) return false;
 
+  Future<int> _nonDeletedBookCount() async {
+    final books = await bookDao.selectNotDeleteBooks();
+    return books.length;
+  }
+
+  Future<bool> _rejectEmptyLibraryUploadIfNeeded() async {
+    final count = await _nonDeletedBookCount();
+    if (!shouldRejectEmptyLibraryUpload(
+      nonDeletedBookCount: count,
+      isUploadDirection: true,
+    )) {
+      return false;
+    }
     final context = navigatorKey.currentContext;
     if (context != null && context.mounted) {
       AnxToast.show(L10n.of(context).syncEmptyLibraryUploadRejected);
+    } else {
+      AnxLog.info('Rejected upload: local library has no non-deleted books');
     }
     return true;
   }
@@ -471,13 +484,12 @@ class Sync extends _$Sync {
             if (!result.isSuccess) {
               await DatabaseSyncManager.showSyncErrorDialog(result);
               AnxLog.severe('Database sync failed: ${result.message}');
-              // Do not reconcile files against the old local database after a
-              // failed database download. The caller must abort this sync.
-              throw StateError('Database sync failed: ${result.message}');
+              // Do not reconcile files against an outdated local database.
+              return false;
             }
           } else {
             await _showSyncAbortedDialog();
-            throw StateError('Remote database not found');
+            return false;
           }
           break;
 
@@ -517,9 +529,8 @@ class Sync extends _$Sync {
             if (!result.isSuccess) {
               await DatabaseSyncManager.showSyncErrorDialog(result);
               AnxLog.severe('Database sync failed: ${result.message}');
-              // Do not reconcile files against the old local database after a
-              // failed database download. The caller must abort this sync.
-              throw StateError('Database sync failed: ${result.message}');
+              // Do not reconcile files against an outdated local database.
+              return false;
             }
           }
           break;

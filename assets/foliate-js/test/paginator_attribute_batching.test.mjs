@@ -169,6 +169,18 @@ const baseStyle = {
   assert.equal(test.renderCount, 2, 'flow switch renders once')
   assert.equal(test.paginator.getAttribute('flow'), 'scrolled')
   assert.equal(refreshCount, 1, 'flow switch keeps refreshLayout behavior')
+
+  // Upstream's fixed-layout renderer has no batched-attributes API.
+  const fixedRenderer = new HTMLElementStub()
+  context.reader.view.renderer = fixedRenderer
+  context.style = { ...baseStyle, pageTurnStyle: 'scroll', maxColumnCount: 1 }
+  context.setStyle(baseStyle)
+  assert.equal(fixedRenderer.getAttribute('flow'), 'scrolled')
+  assert.equal(fixedRenderer.getAttribute('max-column-count'), '1')
+  assert.equal(fixedRenderer.hasAttribute('animated'), true)
+  context.style = { ...baseStyle, pageTurnStyle: 'noAnimation' }
+  context.setStyle(baseStyle)
+  assert.equal(fixedRenderer.hasAttribute('animated'), false)
 }
 
 {

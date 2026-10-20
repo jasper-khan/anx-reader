@@ -140,20 +140,32 @@ const buildRangeContextText = (range) => {
   return contextText;
 };
 
+const isWordChar = (ch) => !!ch && /[A-Za-z0-9\u00C0-\u024F\u3400-\u9FFF\uF900-\uFAFF]/.test(ch);
+
+
+/** CJK Unified Ideographs + compatibility ideographs (Chinese-focused). */
 const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
 const CJK_ONLY_RE = /^[\u3400-\u9FFF\uF900-\uFAFF]+$/;
 
+/**
+ * Android WebView long-press often selects a single CJK character.
+ * Expand that selection to the surrounding Chinese word via Intl.Segmenter.
+ * No-op when Segmenter is unavailable, selection is not a short CJK run,
+ * or the range crosses nodes. Does not touch Latin / multi-word selections.
+ */
 const expandCjkWordRange = (range, locale = 'zh') => {
-  if (!range || typeof Intl === 'undefined'
-    || typeof Intl.Segmenter !== 'function') {
+  if (!range || typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') {
     return range;
   }
 
-  const trimmed = range.toString().trim();
+  const selected = range.toString();
+  const trimmed = selected.trim();
   if (!trimmed || !CJK_ONLY_RE.test(trimmed)) return range;
 
+  // Single CJK char, or a very short CJK run that is clearly the WebView default.
   const codePoints = [...trimmed];
   if (codePoints.length === 0 || codePoints.length > 2) return range;
+
   if (range.startContainer !== range.endContainer) return range;
   if (range.startContainer.nodeType !== Node.TEXT_NODE) return range;
 
@@ -178,6 +190,7 @@ const expandCjkWordRange = (range, locale = 'zh') => {
   for (const { segment, index, isWordLike } of segmenter.segment(fullText)) {
     const segEnd = index + segment.length;
     if (selStart < index || selEnd > segEnd) continue;
+    // Only expand into word-like CJK segments; skip punctuation / spaces.
     if (!isWordLike || !CJK_CHAR_RE.test(segment)) return range;
     if (index === selStart && segEnd === selEnd) return range;
     try {
@@ -196,7 +209,6 @@ const expandAndroidCjkSelection = (doc) => {
   const selection = doc.getSelection();
   const range = getSelectionRange(selection);
   if (!range) return;
-
   const locale =
     doc.documentElement?.lang
     || doc.body?.lang
@@ -210,11 +222,37 @@ const expandAndroidCjkSelection = (doc) => {
   ) {
     return;
   }
-
   try {
     selection.removeAllRanges();
     selection.addRange(expanded);
   } catch (_) {}
+};
+
+
+/** CEF OSR hit-testing can place carets one glyph inside word edges. */
+const expandRangeForCefHitTest = (range) => {
+  const r = range.cloneRange();
+  try {
+    if (r.startContainer.nodeType === Node.TEXT_NODE && r.startOffset > 0) {
+      const text = r.startContainer.textContent || '';
+      const prev = text[r.startOffset - 1];
+      const curr = text[r.startOffset] ?? '';
+      if (isWordChar(prev) && isWordChar(curr)) {
+        r.setStart(r.startContainer, r.startOffset - 1);
+      }
+    }
+    if (r.endContainer.nodeType === Node.TEXT_NODE) {
+      const text = r.endContainer.textContent || '';
+      if (r.endOffset < text.length && r.endOffset > 0) {
+        const last = text[r.endOffset - 1];
+        const next = text[r.endOffset];
+        if (isWordChar(last) && isWordChar(next)) {
+          r.setEnd(r.endContainer, r.endOffset + 1);
+        }
+      }
+    }
+  } catch (_) {}
+  return r;
 };
 
 const handleSelection = (view, doc, index) => {
@@ -222,6 +260,18 @@ const handleSelection = (view, doc, index) => {
   let range = getSelectionRange(selection);
 
   if (!range) return;
+
+  // Linux CEF: nudge endpoints that landed one char inside a word.
+  const isLinuxDesktop = typeof navigator !== 'undefined'
+    && /Linux/i.test(navigator.platform || '')
+    && !/Android/i.test(navigator.userAgent || '');
+  if (isLinuxDesktop) {
+    range = expandRangeForCefHitTest(range);
+    try {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch (_) {}
+  }
 
   const position = getPosition(range);
   const cfi = view.getCFI(index, range);
@@ -336,10 +386,15 @@ const setSelectionHandler = (view, doc, index) => {
     if (!hasActiveSelection) return;
     hasActiveSelection = false;
     lastPointerUpRange = null;
+    // Programmatic clearSelection (menu onClose) must not suppress clicks.
     if (window.__anxProgrammaticClear) {
       doc.__anxSelectionClearedAt = 0;
       doc.__anxSuppressClick = false;
     } else {
+      // User dismiss click: suppress only for the remainder of this event turn
+      // (so the same click does not page-turn). Clear on the next macrotask —
+      // otherwise if click-view never ran (handler bailed while selection was
+      // still a Range), the *next* center click is wrongly eaten.
       doc.__anxSelectionClearedAt = Date.now();
       doc.__anxSuppressClick = true;
       setTimeout(() => {
@@ -483,6 +538,18 @@ const setSelectionHandler = (view, doc, index) => {
         handleSelection(view, doc, index);
       }, 600);
     });
+  } else if (!/Android/i.test(navigator.userAgent)) {
+    // Desktop Linux (CEF/Chromium) and other non-Android desktops.
+    // navigator.platform is like "Linux x86_64", so the Win/Mac branches miss it and
+    // it used to fall into the Android path — which only listens for contextmenu /
+    // pointercancel and never fires handleSelection on mouse drag pointerup.
+    doc.addEventListener('contextmenu', e => {
+      e.preventDefault();
+    });
+    doc.addEventListener('pointerup', () => {
+      if (shouldSkipPointerUp()) return;
+      handleSelection(view, doc, index);
+    });
   } else { // Android
     let hasNativeSelectionStarted = false;
     let longPressSettleTimer;
@@ -518,6 +585,8 @@ const setSelectionHandler = (view, doc, index) => {
         longPressSettleTimer = setTimeout(() => {
           const current = getSelectionRange(doc.getSelection());
           if (!pressed || !current || !rangesEqual(pressed, current)) return;
+          // Expand single-CJK long-press to a word once before the menu.
+          // Do not re-expand on later selectionchange / handle drags.
           expandAndroidCjkSelection(doc);
           if (shouldSkipPointerUp()) return;
           handleSelection(view, doc, index);
@@ -1466,10 +1535,10 @@ class Reader {
       return
     }
 
-    // Debounce only for the current selection-dismiss turn.
+    // Same-turn debounce after selection cleared (setTimeout(0) clears this).
     const lastClearedAt = this.#doc?.__anxSelectionClearedAt ?? 0
     if (lastClearedAt && Date.now() - lastClearedAt < 50) {
-      this.#doc.__anxSelectionClearedAt = 0
+      this.#doc.__anxSelectionClearedAt = 0;
       return
     }
 
@@ -1871,6 +1940,8 @@ const setStyle = (oldStyle) => {
 
 const refreshLayout = () => {
   const cfi = reader.view.lastLocation?.cfi
+  // only the reflowable paginator has `nextSection`
+  if (!reader.view.renderer.nextSection) return
   window.nextSection().then(() => {
     if (cfi) {
       setTimeout(() => {
@@ -1995,11 +2066,19 @@ window.getSelection = () => reader.getSelection()
 
 window.clearSelection = () => {
   window.__anxProgrammaticClear = true
+  try { reader.view.deselect() } finally { window.__anxProgrammaticClear = false }
+}
+window.__anxResetClickSuppress = () => {
   try {
-    reader.view.deselect()
-  } finally {
-    window.__anxProgrammaticClear = false
-  }
+    const docs = [document]
+    document.querySelectorAll('iframe').forEach((f) => {
+      try { if (f.contentDocument) docs.push(f.contentDocument) } catch (_) {}
+    })
+    for (const d of docs) {
+      d.__anxSuppressClick = false
+      d.__anxSelectionClearedAt = 0
+    }
+  } catch (_) {}
 }
 
 window.addAnnotation = (annotation) => reader.addAnnotation(annotation)
@@ -2008,9 +2087,10 @@ window.addBookmarkHere = () => reader.handleBookmark(false)
 
 window.removeAnnotation = (cfi) => reader.removeAnnotation(cfi)
 
-window.prevSection = () => reader.view.renderer.prevSection()
+// fixed layout renderers have no chapters, so these are no-ops for them
+window.prevSection = () => reader.view.renderer.prevSection?.()
 
-window.nextSection = () => reader.view.renderer.nextSection()
+window.nextSection = () => reader.view.renderer.nextSection?.()
 
 window.initTts = () => reader.view.initTTS()
 
