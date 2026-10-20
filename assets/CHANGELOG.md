@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.15.4
 - Sync upstream through v1.15.0-alpha.35: fixed-layout/PDF reading, notes JSON migration, WebDAV redirects, Linux support, AI configuration and desktop stability fixes.
 - Use upstream selection handling, import filename sanitization and note-menu behavior while retaining fork-specific reader performance and data protection.
 - Preserve the fork's Android package identity, update source and Android/Windows release workflow.
